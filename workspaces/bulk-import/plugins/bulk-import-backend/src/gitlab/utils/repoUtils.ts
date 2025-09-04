@@ -22,7 +22,15 @@ import type {
   ScmIntegrations,
 } from '@backstage/integration';
 
-import { Gitlab, ProjectSchema } from '@gitbeaker/rest';
+import {
+  AllGroupProjectsOptions,
+  BasePaginationRequestOptions,
+  Gitlab,
+  OffsetPaginationRequestOptions,
+  ProjectSchema,
+  ShowExpanded,
+  Sudo,
+} from '@gitbeaker/rest';
 import gitUrlParse from 'git-url-parse';
 
 import { getBranchName } from '../../catalog/catalogUtils';
@@ -219,10 +227,17 @@ export async function addGitlabTokenOrgRepositories(
     // For Search: Use the group allProjects api with the search param.
     // I noticed that using this api will only return values when 3 or more characters are used for the search
     // that api gives us all the things the token has access
-    const params = {
+    const params:
+      | (AllGroupProjectsOptions &
+          BasePaginationRequestOptions<'offset'> &
+          OffsetPaginationRequestOptions &
+          Sudo &
+          ShowExpanded<true>)
+      | undefined = {
       perPage: pageSize,
       search: search ?? undefined,
       page: pageNumber,
+      showExpanded: true,
     };
 
     const { data, paginationInfo } = await gitlab.Groups.allProjects<

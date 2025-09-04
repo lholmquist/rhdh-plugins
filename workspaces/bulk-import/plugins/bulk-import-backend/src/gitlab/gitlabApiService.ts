@@ -24,7 +24,7 @@ import {
   ScmIntegrations,
 } from '@backstage/integration';
 
-import { Gitlab } from '@gitbeaker/rest';
+import { Gitlab, GroupSchema } from '@gitbeaker/rest';
 import gitUrlParse from 'git-url-parse';
 
 import { getBranchName, getCatalogFilename } from '../catalog/catalogUtils';
@@ -322,11 +322,11 @@ export class GitlabApiService {
             allAccessibleUsernames.add(username);
           }
           // ... along with orgs accessible from the token auth
-          (
-            await gitlab.Groups.all<true, 'offset'>({
-              allAvailable: false,
-            })
-          )?.data
+
+          const allGroups = await gitlab.Groups.all<false, 'offset'>({
+            allAvailable: false,
+          });
+          allGroups
             .map(org => org.path)
             ?.forEach((orgName: string) => allAccessibleTokenOrgs.add(orgName));
           return {};
