@@ -84,6 +84,9 @@ const createMockOrchestratorService = (): OrchestratorService => {
   mockOrchestratorService.abortWorkflowInstance = jest.fn();
   mockOrchestratorService.pingWorkflowService = jest.fn();
   mockOrchestratorService.fetchWorkflowLogsByInstance = jest.fn();
+  mockOrchestratorService.fetchDefinitionIdsFromInstances = jest.fn();
+  mockOrchestratorService.retriggerWorkflow = jest.fn();
+  mockOrchestratorService.fetchWorkflowInfoOnService = jest.fn();
 
   return mockOrchestratorService;
 };
@@ -327,6 +330,16 @@ describe('getWorkflowOverviewById', () => {
     // Assert
     expect(result).toEqual(mapToWorkflowOverviewDTO(mockOverviewsV1));
   });
+
+  it('throws when overview is not found', async () => {
+    (
+      mockOrchestratorService.fetchWorkflowOverview as jest.Mock
+    ).mockResolvedValue(undefined);
+
+    await expect(v2.getWorkflowOverviewById('missing')).rejects.toThrow(
+      "Couldn't fetch workflow overview for missing",
+    );
+  });
 });
 
 describe('getWorkflowById', () => {
@@ -364,6 +377,25 @@ describe('getWorkflowById', () => {
     expect(workflowV2.format).toEqual(testFormat);
     expect(workflowV2.description).toEqual(wfDefinition.description);
     expect(workflowV2.annotations).toBeDefined();
+  });
+
+  it('maps workflow source to DTO', async () => {
+    const source = `id: test-workflow
+specVersion: "0.8"
+name: Test Workflow
+description: A test workflow
+states:
+  - name: Start
+    type: operation
+    end: true`;
+    (
+      mockOrchestratorService.fetchWorkflowSource as jest.Mock
+    ).mockResolvedValue(source);
+
+    const result = await v2.getWorkflowById('test-workflow');
+
+    expect(result.id).toBe('test-workflow');
+    expect(result.name).toBe('Test Workflow');
   });
 });
 
@@ -881,5 +913,186 @@ describe('getInstanceLogsByInstance', () => {
     expect(instanceLogs).toBeDefined();
     expect(instanceLogs.instanceId).toEqual('123456');
     expect(instanceLogs.logs.length).toEqual(1);
+  });
+});
+
+describe('getWorkflowsOverviewForEntity', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('returns empty result when no workflow ids are available', async () => {
+    (
+      mockOrchestratorService.fetchDefinitionIdsFromInstances as jest.Mock
+    ).mockResolvedValue([]);
+
+    const result = await v2.getWorkflowsOverviewForEntity(
+      'component:default/test',
+      [],
+    );
+
+    expect(result).toEqual({ overviews: [] });
+  });
+
+  it('combines annotation and instance workflow ids', async () => {
+    (
+      mockOrchestratorService.fetchDefinitionIdsFromInstances as jest.Mock
+    ).mockResolvedValue(['from-instance']);
+    (
+      mockOrchestratorService.fetchWorkflowOverviews as jest.Mock
+    ).mockResolvedValue([
+      generateTestWorkflowOverview({ workflowId: 'from-instance' }),
+    ]);
+
+    const result = await v2.getWorkflowsOverviewForEntity(
+      'component:default/test',
+      ['annotated-wf'],
+    );
+
+    expect(mockOrchestratorService.fetchWorkflowOverviews).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filter: {
+          field: 'id',
+          operator: 'IN',
+          value: expect.arrayContaining(['annotated-wf', 'from-instance']),
+        },
+        targetEntity: 'component:default/test',
+      }),
+    );
+    expect(result.overviews).toHaveLength(1);
+  });
+});
+
+describe('getWorkflowSourceById', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('throws when source is not found', async () => {
+    (
+      mockOrchestratorService.fetchWorkflowSource as jest.Mock
+    ).mockResolvedValue(undefined);
+
+    await expect(v2.getWorkflowSourceById('missing')).rejects.toThrow(
+      "Couldn't fetch workflow source for missing",
+    );
+  });
+});
+
+describe('retriggerInstance', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('retriggers instance successfully', async () => {
+    const workflowInfo = generateTestWorkflowInfo();
+    (mockOrchestratorService.fetchWorkflowInfo as jest.Mock).mockResolvedValue(
+      workflowInfo,
+    );
+    (mockOrchestratorService.retriggerWorkflow as jest.Mock).mockResolvedValue(
+      true,
+    );
+
+    await expect(
+      v2.retriggerInstance('wf-1', 'instance-1', {}, 'token'),
+    ).resolves.toBeUndefined();
+  });
+
+  it('throws when workflow info is missing', async () => {
+    (mockOrchestratorService.fetchWorkflowInfo as jest.Mock).mockResolvedValue(
+      undefined,
+    );
+
+    await expect(
+      v2.retriggerInstance('wf-1', 'instance-1', {}, 'token'),
+    ).rejects.toThrow("Couldn't fetch workflow definition for wf-1");
+  });
+
+  it('throws when service URL is missing', async () => {
+    (mockOrchestratorService.fetchWorkflowInfo as jest.Mock).mockResolvedValue({
+      id: 'wf-1',
+    });
+
+    await expect(
+      v2.retriggerInstance('wf-1', 'instance-1', {}, 'token'),
+    ).rejects.toThrow('ServiceURL is not defined for workflow wf-1');
+  });
+});
+
+describe('pingWorkflowService', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('returns true when service is available', async () => {
+    const workflowInfo = generateTestWorkflowInfo();
+    (mockOrchestratorService.fetchWorkflowInfo as jest.Mock).mockResolvedValue(
+      workflowInfo,
+    );
+    (
+      mockOrchestratorService.pingWorkflowService as jest.Mock
+    ).mockResolvedValue(true);
+
+    await expect(v2.pingWorkflowService('wf-1')).resolves.toBe(true);
+  });
+
+  it('throws when service is unavailable', async () => {
+    const workflowInfo = generateTestWorkflowInfo();
+    (mockOrchestratorService.fetchWorkflowInfo as jest.Mock).mockResolvedValue(
+      workflowInfo,
+    );
+    (
+      mockOrchestratorService.pingWorkflowService as jest.Mock
+    ).mockResolvedValue(false);
+
+    await expect(v2.pingWorkflowService('wf-1')).rejects.toThrow(
+      'Workflow service for workflow wf-1',
+    );
+  });
+});
+
+describe('getWorkflowInputSchemaById', () => {
+  it('delegates to orchestrator service', async () => {
+    const workflowInfo = generateTestWorkflowInfo();
+    (
+      mockOrchestratorService.fetchWorkflowInfoOnService as jest.Mock
+    ).mockResolvedValue(workflowInfo);
+
+    const result = await v2.getWorkflowInputSchemaById(
+      'wf-1',
+      'http://service',
+    );
+
+    expect(result).toBe(workflowInfo);
+    expect(
+      mockOrchestratorService.fetchWorkflowInfoOnService,
+    ).toHaveBeenCalledWith({
+      definitionId: 'wf-1',
+      serviceUrl: 'http://service',
+    });
+  });
+});
+
+describe('extractQueryParam', () => {
+  it('returns query param value when present', () => {
+    const req = { query: { instanceId: 'inst-1' } } as any;
+    expect(v2.extractQueryParam(req, 'instanceId')).toBe('inst-1');
+  });
+
+  it('returns undefined when query param is missing', () => {
+    const req = { query: {} } as any;
+    expect(v2.extractQueryParam(req, 'instanceId')).toBeUndefined();
+  });
+});
+
+describe('getInstanceById not found', () => {
+  it('throws when instance is undefined', async () => {
+    (mockOrchestratorService.fetchInstance as jest.Mock).mockResolvedValue(
+      undefined,
+    );
+
+    await expect(v2.getInstanceById('missing')).rejects.toThrow(
+      "Couldn't fetch process instance missing",
+    );
   });
 });

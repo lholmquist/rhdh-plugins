@@ -476,4 +476,65 @@ describe('OrchestratorService', () => {
       expect(result).toBeDefined();
     });
   });
+
+  describe('getWorkflowIds', () => {
+    it('returns definition IDs from workflow cache', () => {
+      workflowCacheServiceMock.definitionIds = ['wf-1', 'wf-2'];
+
+      expect(orchestratorService.getWorkflowIds()).toEqual(['wf-1', 'wf-2']);
+    });
+  });
+
+  describe('fetchDefinitionIdsFromInstances', () => {
+    it('delegates to data index service', async () => {
+      dataIndexServiceMock.fetchDefinitionIdsFromInstances = jest
+        .fn()
+        .mockResolvedValue(['wf-from-instance']);
+
+      const result = await orchestratorService.fetchDefinitionIdsFromInstances({
+        targetEntity: 'component:default/test',
+      });
+
+      expect(result).toEqual(['wf-from-instance']);
+      expect(
+        dataIndexServiceMock.fetchDefinitionIdsFromInstances,
+      ).toHaveBeenCalledWith({ targetEntity: 'component:default/test' });
+    });
+  });
+
+  describe('retriggerWorkflow', () => {
+    it('delegates to sonata flow service', async () => {
+      sonataFlowServiceMock.retriggerInstance = jest
+        .fn()
+        .mockResolvedValue(true);
+
+      const result = await orchestratorService.retriggerWorkflow({
+        definitionId,
+        instanceId,
+        serviceUrl,
+      });
+
+      expect(result).toBe(true);
+      expect(sonataFlowServiceMock.retriggerInstance).toHaveBeenCalled();
+    });
+  });
+
+  describe('hasLogProvider', () => {
+    it('returns false when no log provider is configured', () => {
+      expect(orchestratorService.hasLogProvider()).toBe(false);
+    });
+  });
+
+  describe('fetchWorkflowOverviews with empty results', () => {
+    it('returns empty array without pinging services', async () => {
+      sonataFlowServiceMock.fetchWorkflowOverviews = jest
+        .fn()
+        .mockResolvedValue([]);
+
+      const result = await orchestratorService.fetchWorkflowOverviews({});
+
+      expect(result).toEqual([]);
+      expect(sonataFlowServiceMock.pingWorkflowService).not.toHaveBeenCalled();
+    });
+  });
 });

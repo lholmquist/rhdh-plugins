@@ -31,8 +31,11 @@ import {
 } from '../test-utils';
 import {
   getProcessInstancesStatusDTOFromString,
+  getWorkflowFormatDTO,
   mapToExecuteWorkflowResponseDTO,
+  mapToNodeInstanceDTO,
   mapToProcessInstanceDTO,
+  mapToWorkflowDTO,
   mapToWorkflowOverviewDTO,
   mapToWorkflowRunStatusDTO,
 } from './V2Mappings';
@@ -187,5 +190,62 @@ describe('scenarios to verify mapToWorkflowRunStatusDTO', () => {
     expect(mappedValue.value).toBeDefined();
     expect(mappedValue.key).toEqual('Active');
     expect(mappedValue.value).toEqual('ACTIVE');
+  });
+});
+
+describe('getProcessInstancesStatusDTOFromString', () => {
+  it('throws for invalid state values', () => {
+    expect(() => getProcessInstancesStatusDTOFromString('INVALID')).toThrow(
+      'state INVALID is not one of the values of type ProcessInstanceStatusDTO',
+    );
+  });
+});
+
+describe('mapToWorkflowDTO', () => {
+  it('maps workflow source to WorkflowDTO', () => {
+    const source = `id: test-workflow
+specVersion: "0.8"
+name: Test Workflow
+description: A test workflow
+annotations:
+  - test-annotation
+states:
+  - name: Start
+    type: operation
+    end: true`;
+
+    const result = mapToWorkflowDTO(source);
+
+    expect(result.id).toBe('test-workflow');
+    expect(result.name).toBe('Test Workflow');
+    expect(result.description).toBe('A test workflow');
+    expect(result.annotations).toEqual(['test-annotation']);
+    expect(result.format).toBe(getWorkflowFormatDTO(source));
+  });
+});
+
+describe('mapToNodeInstanceDTO', () => {
+  it('adds __typename to node instance', () => {
+    const node = { id: 'node-1', name: 'Start', type: 'operation' } as any;
+    const result = mapToNodeInstanceDTO(node);
+    expect(result.__typename).toBe('NodeInstance');
+    expect(result.id).toBe('node-1');
+  });
+});
+
+describe('mapToProcessInstanceDTO with string variables', () => {
+  it('parses JSON string variables', () => {
+    const processInstance: ProcessInstance = {
+      ...generateProcessInstance(1),
+      variables: JSON.stringify({
+        workflowdata: { foo: 'bar' },
+        initiatorEntity: 'user:default/test',
+      }),
+    };
+
+    const result = mapToProcessInstanceDTO(processInstance);
+
+    expect(result.workflowdata).toEqual({ foo: 'bar' });
+    expect(result.initiatorEntity).toBe('user:default/test');
   });
 });

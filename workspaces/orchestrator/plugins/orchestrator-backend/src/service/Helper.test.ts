@@ -14,12 +14,23 @@
  * limitations under the License.
  */
 
+import { mockServices } from '@backstage/backend-test-utils';
+
+import fs from 'fs-extra';
+
 import {
   ProcessInstance,
   ProcessInstanceState,
 } from '@red-hat-developer-hub/backstage-plugin-orchestrator-common';
 
-import { getWorkflowRunStats, retryAsyncFunction } from './Helper';
+import {
+  delay,
+  executeWithRetry,
+  getWorkflowRunStats,
+  getWorkingDirectory,
+  groupByProcessIdAndVersion,
+  retryAsyncFunction,
+} from './Helper';
 
 describe('retryAsyncFunction', () => {
   const successfulResponse = 'Success';
@@ -128,5 +139,184 @@ describe('getWorkflowRunStats', () => {
     });
 
     expect(result[0].averageTimeToComplete).toBe(tenMinutesMs / 2);
+  });
+
+  it('calculates success and error counts and runsLastMonth', () => {
+    const recentStart = new Date(
+      Date.now() - 5 * 24 * 60 * 60 * 1000,
+    ).toISOString();
+    const oldStart = new Date(
+      Date.now() - 60 * 24 * 60 * 60 * 1000,
+    ).toISOString();
+
+    const result = getWorkflowRunStats({
+      'workflow-a-1.0': [
+        createProcessInstance({
+          id: '1',
+          processId: 'workflow-a',
+          state: ProcessInstanceState.Completed,
+          start: recentStart,
+          end: '2024-01-01T01:00:00.000Z',
+        }),
+        createProcessInstance({
+          id: '2',
+          processId: 'workflow-a',
+          state: ProcessInstanceState.Error,
+          start: oldStart,
+        }),
+      ],
+    });
+
+    expect(result[0].successCount).toBe(1);
+    expect(result[0].errorCount).toBe(1);
+    expect(result[0].totalCount).toBe(2);
+    expect(result[0].successRatio).toBe(0.5);
+    expect(result[0].runsLastMonth).toBe(1);
+  });
+});
+
+describe('groupByProcessIdAndVersion', () => {
+  it('groups instances by processId and version', () => {
+    const instances: ProcessInstance[] = [
+      {
+        id: '1',
+        processId: 'wf-a',
+        version: '1.0',
+        endpoint: 'e',
+        nodes: [],
+      },
+      {
+        id: '2',
+        processId: 'wf-a',
+        version: '1.0',
+        endpoint: 'e',
+        nodes: [],
+      },
+      {
+        id: '3',
+        processId: 'wf-b',
+        version: '2.0',
+        endpoint: 'e',
+        nodes: [],
+      },
+    ];
+
+    const grouped = groupByProcessIdAndVersion(instances);
+
+    expect(grouped['wf-a-1.0']).toHaveLength(2);
+    expect(grouped['wf-b-2.0']).toHaveLength(1);
+  });
+});
+
+describe('getWorkingDirectory', () => {
+  it('returns os tmpdir when backend.workingDirectory is not configured', async () => {
+    const config = mockServices.rootConfig();
+    const logger = mockServices.logger.mock();
+
+    const dir = await getWorkingDirectory(config, logger);
+
+    expect(typeof dir).toBe('string');
+    expect(dir.length).toBeGreaterThan(0);
+  });
+
+  it('returns configured working directory when it exists and is writable', async () => {
+    const workingDirectory = '/tmp/orchestrator-test-wd';
+    jest.spyOn(fs, 'access').mockResolvedValue(undefined);
+    const config = mockServices.rootConfig({
+      data: { backend: { workingDirectory } },
+    });
+    const logger = mockServices.logger.mock();
+
+    const dir = await getWorkingDirectory(config, logger);
+
+    expect(dir).toBe(workingDirectory);
+    expect(logger.info).toHaveBeenCalledWith(
+      expect.stringContaining(workingDirectory),
+    );
+  });
+
+  it('throws when configured working directory does not exist', async () => {
+    const err = Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+    jest.spyOn(fs, 'access').mockRejectedValue(err);
+    const config = mockServices.rootConfig({
+      data: { backend: { workingDirectory: '/missing/path' } },
+    });
+    const logger = mockServices.logger.mock();
+
+    await expect(getWorkingDirectory(config, logger)).rejects.toThrow('ENOENT');
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining('does not exist'),
+    );
+  });
+
+  it('throws when configured working directory is not writable', async () => {
+    const err = Object.assign(new Error('EACCES'), { code: 'EACCES' });
+    jest.spyOn(fs, 'access').mockRejectedValue(err);
+    const config = mockServices.rootConfig({
+      data: { backend: { workingDirectory: '/readonly/path' } },
+    });
+    const logger = mockServices.logger.mock();
+
+    await expect(getWorkingDirectory(config, logger)).rejects.toThrow('EACCES');
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining('is not writable'),
+    );
+  });
+});
+
+describe('executeWithRetry', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('returns response when action succeeds', async () => {
+    const response = { status: 200 } as Response;
+    const action = jest.fn().mockResolvedValue(response);
+
+    const resultPromise = executeWithRetry(action, 3);
+    await jest.runAllTimersAsync();
+    const result = await resultPromise;
+
+    expect(result).toBe(response);
+    expect(action).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries on HTTP error responses until success', async () => {
+    const action = jest
+      .fn()
+      .mockResolvedValueOnce({ status: 500 } as Response)
+      .mockResolvedValueOnce({ status: 200 } as Response);
+
+    const resultPromise = executeWithRetry(action, 3);
+    await jest.runAllTimersAsync();
+    const result = await resultPromise;
+
+    expect(result.status).toBe(200);
+    expect(action).toHaveBeenCalledTimes(2);
+  });
+
+  it('throws after exceeding max errors', async () => {
+    const action = jest.fn().mockRejectedValue(new Error('network'));
+
+    const resultPromise = executeWithRetry(action, 2);
+    const assertion = await expect(resultPromise).rejects.toThrow(
+      'Unable to execute query.',
+    );
+    await jest.runAllTimersAsync();
+    await assertion;
+  });
+});
+
+describe('delay', () => {
+  it('resolves after the specified time', async () => {
+    jest.useFakeTimers();
+    const promise = delay(1000);
+    jest.advanceTimersByTime(1000);
+    await expect(promise).resolves.toBeUndefined();
+    jest.useRealTimers();
   });
 });

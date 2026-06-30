@@ -62,6 +62,8 @@ jest.mock('@urql/core', () => {
     Client: jest.fn().mockImplementation(() => ({
       query: jest.fn(),
     })),
+    gql: (strings: TemplateStringsArray) => strings.join(''),
+    fetchExchange: jest.fn(),
   };
 });
 
@@ -901,6 +903,142 @@ describe('fetchInstances', () => {
     );
     expect(result).toBeDefined();
     expect(result).toStrictEqual(mockQueryResult.ProcessInstances);
+  });
+});
+
+describe('fetchWorkflowInfo', () => {
+  let loggerMock: LoggerService;
+  let dataIndexService: DataIndexService;
+  let mockClient: jest.Mocked<Pick<Client, 'query'>>;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockClient = { query: jest.fn() };
+    (Client as jest.MockedClass<typeof Client>).mockImplementation(
+      () => mockClient as unknown as Client,
+    );
+    loggerMock = {
+      info: jest.fn(),
+      debug: jest.fn(),
+      error: jest.fn(),
+      warn: jest.fn(),
+      child: jest.fn(),
+    };
+    dataIndexService = new DataIndexService('fakeUrl', loggerMock);
+  });
+
+  it('returns workflow info when definition exists', async () => {
+    const workflowInfo: WorkflowInfo = {
+      id: 'wf-1',
+      name: 'Test Workflow',
+      serviceUrl: 'http://localhost:8080',
+    };
+    mockClient.query.mockResolvedValueOnce(
+      mockOperationResult({ ProcessDefinitions: [workflowInfo] }),
+    );
+
+    const result = await dataIndexService.fetchWorkflowInfo('wf-1');
+
+    expect(result).toEqual(workflowInfo);
+    expect(mockClient.query).toHaveBeenCalled();
+  });
+
+  it('returns undefined when no definition is found', async () => {
+    mockClient.query.mockResolvedValueOnce(
+      mockOperationResult({ ProcessDefinitions: [] }),
+    );
+
+    const result = await dataIndexService.fetchWorkflowInfo('missing');
+
+    expect(result).toBeUndefined();
+    expect(loggerMock.info).toHaveBeenCalledWith(
+      expect.stringContaining('No workflow definition found'),
+    );
+  });
+});
+
+describe('fetchWorkflowServiceUrls', () => {
+  let loggerMock: LoggerService;
+  let dataIndexService: DataIndexService;
+  let mockClient: jest.Mocked<Pick<Client, 'query'>>;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockClient = { query: jest.fn() };
+    (Client as jest.MockedClass<typeof Client>).mockImplementation(
+      () => mockClient as unknown as Client,
+    );
+    loggerMock = {
+      info: jest.fn(),
+      debug: jest.fn(),
+      error: jest.fn(),
+      warn: jest.fn(),
+      child: jest.fn(),
+    };
+    dataIndexService = new DataIndexService('fakeUrl', loggerMock);
+  });
+
+  it('returns a map of workflow id to service url', async () => {
+    mockClient.query.mockResolvedValueOnce(
+      mockOperationResult({
+        ProcessDefinitions: [
+          { id: 'wf-1', serviceUrl: 'http://localhost:8081' },
+          { id: 'wf-2', serviceUrl: 'http://localhost:8082' },
+          { id: 'wf-3' },
+        ],
+      }),
+    );
+
+    const result = await dataIndexService.fetchWorkflowServiceUrls();
+
+    expect(result).toEqual({
+      'wf-1': 'http://localhost:8081',
+      'wf-2': 'http://localhost:8082',
+    });
+  });
+});
+
+describe('fetchDefinitionIdsFromInstances', () => {
+  let loggerMock: LoggerService;
+  let dataIndexService: DataIndexService;
+  let mockClient: jest.Mocked<Pick<Client, 'query'>>;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockClient = { query: jest.fn() };
+    (Client as jest.MockedClass<typeof Client>).mockImplementation(
+      () => mockClient as unknown as Client,
+    );
+    loggerMock = {
+      info: jest.fn(),
+      debug: jest.fn(),
+      error: jest.fn(),
+      warn: jest.fn(),
+      child: jest.fn(),
+    };
+    dataIndexService = new DataIndexService('fakeUrl', loggerMock);
+    mockClient.query.mockResolvedValueOnce(
+      mockOperationResult(mockProcessInstanceArguments),
+    );
+  });
+
+  it('returns unique process ids for a target entity', async () => {
+    mockClient.query.mockResolvedValueOnce(
+      mockOperationResult({
+        ProcessInstances: [
+          { processId: 'wf-a' },
+          { processId: 'wf-b' },
+          { processId: 'wf-a' },
+        ],
+      }),
+    );
+
+    const result = await dataIndexService.fetchDefinitionIdsFromInstances({
+      targetEntity: 'component:default/test',
+    });
+
+    expect(result).toEqual(['wf-a', 'wf-b']);
+    expect(mockClient.query).toHaveBeenCalledTimes(2);
   });
 });
 

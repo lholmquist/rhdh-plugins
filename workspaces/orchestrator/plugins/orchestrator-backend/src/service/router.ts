@@ -862,8 +862,9 @@ function setupInternalRoutes(
             allWorkflowIds,
           );
 
-        if (!authorizedWorkflowIds || authorizedWorkflowIds.length === 0)
-          res.json([]);
+        if (!authorizedWorkflowIds || authorizedWorkflowIds.length === 0) {
+          return res.json([]);
+        }
 
         const credentials = await httpAuth.credentials(req);
         const initiatorEntity = (await userInfo.getUserInfo(credentials))
@@ -909,10 +910,10 @@ function setupInternalRoutes(
         );
 
         auditEvent.success({ meta: { authorizedWorkflowIds } });
-        res.json(result);
+        return res.json(result);
       } catch (error) {
         auditEvent.fail({ error });
-        next(error);
+        return next(error);
       }
     },
   );
