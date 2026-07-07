@@ -303,11 +303,11 @@ describe('executeWithRetry', () => {
     const action = jest.fn().mockRejectedValue(new Error('network'));
 
     const resultPromise = executeWithRetry(action, 2);
-    const assertion = await expect(resultPromise).rejects.toThrow(
-      'Unable to execute query.',
-    );
-    await jest.runAllTimersAsync();
-    await assertion;
+    await Promise.all([
+      jest.runAllTimersAsync(),
+      expect(resultPromise).rejects.toThrow('Unable to execute query.'),
+    ]);
+    expect(action).toHaveBeenCalledTimes(2);
   });
 });
 
