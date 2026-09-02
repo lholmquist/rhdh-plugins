@@ -1,0 +1,23 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: red-hat-developer-hub-secure-token-storage
+  title: RHDH Secure Token Storage plugin
+  description: Standalone foundation for secure, server-side provider token storage.
+  annotations:
+    backstage.io/techdocs-ref: dir:.
+    github.com/project-slug: redhat-developer/rhdh-plugins
+  tags:
+    - rhdh
+    - plugin
+    - security
+    - authentication
+  links:
+    - url: https://github.com/redhat-developer/rhdh-plugins/tree/main/workspaces/secure-token-storage
+      title: GitHub Source
+      icon: source
+spec:
+  type: backstage-plugin
+  lifecycle: experimental
+  owner: rhdh-plugins
+  subcomponentOf: rhdh-plugins
