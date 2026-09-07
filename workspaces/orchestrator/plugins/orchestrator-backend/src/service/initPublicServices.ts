@@ -15,7 +15,6 @@
  */
 
 import type {
-  AuthService,
   LoggerService,
   SchedulerService,
 } from '@backstage/backend-plugin-api';
@@ -34,10 +33,10 @@ import { WorkflowCacheService } from './WorkflowCacheService';
 export interface PublicServices {
   dataInputSchemaService: DataInputSchemaService;
   orchestratorService: OrchestratorService;
+  providerTokenGrantResolver?: ProviderTokenGrantResolver;
 }
 
 export interface PublicServicesOptions {
-  auth?: AuthService;
   providerTokenGrantResolver?: ProviderTokenGrantResolver;
 }
 
@@ -56,8 +55,6 @@ export function initPublicServices(
     dataIndexService,
     logger,
     orchestratorKafka,
-    options.providerTokenGrantResolver,
-    options.auth,
   );
 
   const workflowCacheService = new WorkflowCacheService(
@@ -87,5 +84,6 @@ export function initPublicServices(
   return {
     orchestratorService,
     dataInputSchemaService,
+    providerTokenGrantResolver: options.providerTokenGrantResolver,
   };
 }

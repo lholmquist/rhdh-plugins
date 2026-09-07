@@ -14,10 +14,7 @@
  * limitations under the License.
  */
 
-import {
-  type AuthService,
-  type LoggerService,
-} from '@backstage/backend-plugin-api';
+import type { LoggerService } from '@backstage/backend-plugin-api';
 
 import { CloudEvent, Kafka as KafkaCE } from 'cloudevents';
 import { Kafka } from 'kafkajs';
@@ -37,7 +34,6 @@ import {
   WorkflowInfo,
   WorkflowOverview,
 } from '@red-hat-developer-hub/backstage-plugin-orchestrator-common';
-import type { ProviderTokenGrantResolver } from '@red-hat-developer-hub/backstage-plugin-orchestrator-node';
 
 import { randomUUID } from 'node:crypto';
 
@@ -53,8 +49,6 @@ export class SonataFlowService {
     private readonly dataIndexService: DataIndexService,
     private readonly logger: LoggerService,
     private readonly kafkaServiceOptions?: OrchestratorKafkaServiceOptions,
-    private readonly providerTokenGrantResolver?: ProviderTokenGrantResolver,
-    private readonly auth?: AuthService,
   ) {
     // If there are kafkaServiceOptions, then do the implemntation
     if (this.kafkaServiceOptions) {
@@ -314,14 +308,8 @@ export class SonataFlowService {
       'Content-Type': 'application/json',
     };
 
-    const providerTokenAuthTokens = await this.resolveProviderTokenGrants(
-      args.providerTokenGrants,
-    );
-    this.addAuthHeaders(
-      headers,
-      [...(args.authTokens ?? []), ...providerTokenAuthTokens],
-      args.backstageToken,
-    );
+    this.addAuthHeaders(headers, args.authTokens, args.backstageToken);
+    this.addProviderTokenGrantHeaders(headers, args.providerTokenGrants);
     const headerKeys = Object.keys(headers);
     this.logger.info(
       `Executing workflow ${args.definitionId} with headers: ${headerKeys.join(', ')}`,
@@ -386,28 +374,18 @@ export class SonataFlowService {
     }
   }
 
-  private async resolveProviderTokenGrants(
+  private addProviderTokenGrantHeaders(
+    headers: Record<string, string>,
     providerTokenGrants?: Array<ProviderTokenGrantReference>,
-  ): Promise<Array<AuthToken>> {
+  ): void {
     if (!providerTokenGrants?.length) {
-      return [];
+      return;
     }
-    if (!this.providerTokenGrantResolver || !this.auth) {
-      throw new Error(
-        'Provider token grant execution is not configured for Orchestrator',
-      );
-    }
-
-    const caller = await this.auth.getOwnServiceCredentials();
-    return Promise.all(
-      providerTokenGrants.map(async grant => {
-        const result = await this.providerTokenGrantResolver!.getAccessToken({
-          grantId: grant.grantId,
-          provider: grant.provider,
-          caller,
-        });
-        return { provider: grant.provider, token: result.accessToken };
-      }),
+    headers['X-Provider-Token-Grants'] = JSON.stringify(
+      providerTokenGrants.map(grant => ({
+        grantId: grant.grantId,
+        provider: grant.provider,
+      })),
     );
   }
 
@@ -423,14 +401,8 @@ export class SonataFlowService {
       'Content-Type': 'application/json',
     };
 
-    const providerTokenAuthTokens = await this.resolveProviderTokenGrants(
-      args.providerTokenGrants,
-    );
-    this.addAuthHeaders(
-      headers,
-      [...(args.authTokens ?? []), ...providerTokenAuthTokens],
-      args.backstageToken,
-    );
+    this.addAuthHeaders(headers, args.authTokens, args.backstageToken);
+    this.addProviderTokenGrantHeaders(headers, args.providerTokenGrants);
     const headerKeys = Object.keys(headers);
     this.logger.info(
       `Retriggering workflow ${args.definitionId} with headers: ${headerKeys.join(', ')}`,
