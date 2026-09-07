@@ -155,4 +155,63 @@ describe('secure token storage router', () => {
       expiresAt: undefined,
     });
   });
+
+  it('lists only grants owned by the authenticated user', async () => {
+    const httpAuth = {
+      credentials: jest.fn().mockResolvedValue(userCredentials()),
+    } as unknown as jest.Mocked<HttpAuthService>;
+    const service = {
+      listGrants: jest.fn().mockResolvedValue([
+        {
+          grantId: 'grant-1',
+          callerSubject: 'sonataflow',
+          provider: 'github',
+          scopes: ['repo'],
+          createdAt: new Date('2026-09-07T12:00:00Z'),
+          expiresAt: new Date('2026-09-08T12:00:00Z'),
+        },
+      ]),
+    } as unknown as jest.Mocked<SecureTokenStorageService>;
+    const app = express();
+    app.use(
+      '/api/secure-token-storage',
+      await createRouter({ httpAuth, service }),
+    );
+
+    await request(app)
+      .get('/api/secure-token-storage/grants')
+      .query({ provider: 'github' })
+      .expect(200);
+
+    expect(service.listGrants).toHaveBeenCalledWith({
+      userEntityRef: 'user:default/luke',
+      provider: 'github',
+    });
+  });
+
+  it('disconnects a provider for the authenticated user', async () => {
+    const httpAuth = {
+      credentials: jest.fn().mockResolvedValue(userCredentials()),
+    } as unknown as jest.Mocked<HttpAuthService>;
+    const service = {
+      disconnectProvider: jest.fn().mockResolvedValue({
+        provider: 'github',
+        revokedGrantCount: 2,
+      }),
+    } as unknown as jest.Mocked<SecureTokenStorageService>;
+    const app = express();
+    app.use(
+      '/api/secure-token-storage',
+      await createRouter({ httpAuth, service }),
+    );
+
+    await request(app)
+      .post('/api/secure-token-storage/connections/github/disconnect')
+      .expect(200, { provider: 'github', revokedGrantCount: 2 });
+
+    expect(service.disconnectProvider).toHaveBeenCalledWith({
+      userEntityRef: 'user:default/luke',
+      provider: 'github',
+    });
+  });
 });

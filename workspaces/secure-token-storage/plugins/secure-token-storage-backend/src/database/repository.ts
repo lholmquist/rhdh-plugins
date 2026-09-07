@@ -54,6 +54,28 @@ export interface StoredConnectSession {
   grantId?: string;
 }
 
+export type AuditEventType =
+  | 'grant-created'
+  | 'grant-used'
+  | 'grant-denied'
+  | 'grant-revoked'
+  | 'token-refreshed'
+  | 'token-refresh-failed'
+  | 'provider-disconnected'
+  | 'consent-denied';
+
+export interface StoredAuditEvent {
+  id: string;
+  eventType: AuditEventType;
+  userEntityRef?: string;
+  provider?: string;
+  connectionId?: string;
+  grantId?: string;
+  callerSubject?: string;
+  occurredAt: Date;
+  metadata: Record<string, string | number | boolean>;
+}
+
 type ConnectionRow = {
   id: string;
   user_entity_ref: string;
@@ -285,10 +307,67 @@ export class TokenStorageRepository {
     return row ? fromGrantRow(row) : undefined;
   }
 
-  async revokeGrant(id: string, userEntityRef: string): Promise<void> {
-    await this.database('secure_token_storage_grants')
+  async listGrants(
+    userEntityRef: string,
+    provider?: string,
+  ): Promise<StoredGrant[]> {
+    const query = this.database('secure_token_storage_grants').where({
+      user_entity_ref: userEntityRef,
+    });
+    if (provider) query.andWhere({ provider });
+    const rows = await query
+      .orderBy('created_at', 'desc')
+      .select<GrantRow[]>('*');
+    return rows.map(fromGrantRow);
+  }
+
+  async revokeGrant(
+    id: string,
+    userEntityRef: string,
+    revokedAt: Date,
+  ): Promise<boolean> {
+    const updated = await this.database('secure_token_storage_grants')
       .where({ id, user_entity_ref: userEntityRef })
-      .update({ revoked_at: new Date() });
+      .whereNull('revoked_at')
+      .update({ revoked_at: revokedAt });
+    return updated === 1;
+  }
+
+  async disconnectProvider(
+    userEntityRef: string,
+    provider: string,
+    revokedAt: Date,
+  ): Promise<{ connectionId: string; revokedGrantCount: number } | undefined> {
+    return this.database.transaction(async transaction => {
+      const connection = await transaction('secure_token_storage_connections')
+        .select('id', 'revoked_at')
+        .where({ user_entity_ref: userEntityRef, provider })
+        .first<{ id: string; revoked_at?: Date | string }>();
+      if (!connection || connection.revoked_at) return undefined;
+
+      await transaction('secure_token_storage_connections')
+        .where({ id: connection.id })
+        .update({ revoked_at: revokedAt, updated_at: revokedAt });
+      const revokedGrantCount = await transaction('secure_token_storage_grants')
+        .where({ user_entity_ref: userEntityRef, provider })
+        .whereNull('revoked_at')
+        .update({ revoked_at: revokedAt });
+      return { connectionId: connection.id, revokedGrantCount };
+    });
+  }
+
+  async recordAuditEvent(event: StoredAuditEvent): Promise<void> {
+    await this.database('secure_token_storage_audit_events').insert({
+      id: event.id,
+      event_type: event.eventType,
+      user_entity_ref: event.userEntityRef,
+      provider: event.provider,
+      connection_id: event.connectionId,
+      grant_id: event.grantId,
+      caller_subject: event.callerSubject,
+      occurred_at: event.occurredAt,
+      metadata_json: JSON.stringify(event.metadata),
+    });
   }
 
   async createConnectSession(session: StoredConnectSession): Promise<void> {

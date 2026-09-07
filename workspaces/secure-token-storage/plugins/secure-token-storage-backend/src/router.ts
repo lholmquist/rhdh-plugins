@@ -185,6 +185,41 @@ export async function createRouter(options: {
     }
   });
 
+  router.get('/grants', async (request, response) => {
+    try {
+      const credentials = await options.httpAuth.credentials(request, {
+        allow: ['user'],
+      });
+      response.json(
+        await options.service.listGrants({
+          userEntityRef: credentials.principal.userEntityRef,
+          provider: queryString(request.query.provider),
+        }),
+      );
+    } catch (error) {
+      sendSafeError(response, error);
+    }
+  });
+
+  router.post(
+    '/connections/:provider/disconnect',
+    async (request, response) => {
+      try {
+        const credentials = await options.httpAuth.credentials(request, {
+          allow: ['user'],
+        });
+        response.json(
+          await options.service.disconnectProvider({
+            userEntityRef: credentials.principal.userEntityRef,
+            provider: request.params.provider,
+          }),
+        );
+      } catch (error) {
+        sendSafeError(response, error);
+      }
+    },
+  );
+
   router.post('/grants/:grantId/revoke', async (request, response) => {
     try {
       const credentials = await options.httpAuth.credentials(request, {

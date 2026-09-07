@@ -28,9 +28,12 @@ function createRepository() {
     upsertConnection: jest.fn(),
     createGrant: jest.fn(),
     findGrant: jest.fn(),
+    listGrants: jest.fn(),
     markConnectionUsed: jest.fn(),
     updateConnectionTokens: jest.fn(),
     revokeGrant: jest.fn(),
+    disconnectProvider: jest.fn(),
+    recordAuditEvent: jest.fn(),
     createConnectSession: jest.fn(),
     findConnectSessionByStateHash: jest.fn(),
     findConnectSession: jest.fn(),
@@ -377,5 +380,98 @@ describe('DefaultSecureTokenStorageService', () => {
       }),
       new Date('2026-09-07T12:00:00Z'),
     );
+    expect(repository.recordAuditEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: 'grant-created',
+        grantId: expect.any(String),
+        metadata: { scopeCount: 1 },
+      }),
+    );
+  });
+
+  it('lists grants and disconnects a provider through the user-owned service boundary', async () => {
+    const repository = createRepository();
+    repository.listGrants.mockResolvedValue([
+      {
+        id: 'grant-1',
+        userEntityRef: 'user:default/luke',
+        callerSubject: 'sonataflow',
+        provider: 'github',
+        scopes: ['repo'],
+        createdAt: new Date('2026-09-07T11:00:00Z'),
+        expiresAt: new Date('2026-09-08T11:00:00Z'),
+      },
+    ]);
+    repository.disconnectProvider.mockResolvedValue({
+      connectionId: 'connection-1',
+      revokedGrantCount: 1,
+    });
+    const service = new DefaultSecureTokenStorageService(true, {
+      repository,
+      cipher: createTokenCipher({ activeKey: key, activeKeyVersion: 'v1' }),
+      now: () => new Date('2026-09-07T12:00:00Z'),
+    });
+
+    await expect(
+      service.listGrants({
+        userEntityRef: 'user:default/luke',
+        provider: 'github',
+      }),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        grantId: 'grant-1',
+        provider: 'github',
+      }),
+    ]);
+    await expect(
+      service.disconnectProvider({
+        userEntityRef: 'user:default/luke',
+        provider: 'github',
+      }),
+    ).resolves.toEqual({ provider: 'github', revokedGrantCount: 1 });
+    expect(repository.listGrants).toHaveBeenCalledWith(
+      'user:default/luke',
+      'github',
+    );
+    expect(repository.disconnectProvider).toHaveBeenCalledWith(
+      'user:default/luke',
+      'github',
+      new Date('2026-09-07T12:00:00Z'),
+    );
+    expect(repository.recordAuditEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: 'provider-disconnected',
+        connectionId: 'connection-1',
+        metadata: { revokedGrantCount: 1 },
+      }),
+    );
+  });
+
+  it('records a denial without exposing token material', async () => {
+    const repository = createRepository();
+    repository.findGrant.mockResolvedValue(undefined);
+    const service = new DefaultSecureTokenStorageService(true, {
+      repository,
+      cipher: createTokenCipher({ activeKey: key, activeKeyVersion: 'v1' }),
+    });
+
+    await expect(
+      service.getAccessToken({
+        grantId: 'missing-grant',
+        provider: 'github',
+        caller: caller('sonataflow'),
+      }),
+    ).rejects.toMatchObject({ code: 'grant-not-found' });
+    expect(repository.recordAuditEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: 'grant-denied',
+        grantId: 'missing-grant',
+        callerSubject: 'sonataflow',
+        metadata: { reason: 'grant-not-found' },
+      }),
+    );
+    expect(
+      JSON.stringify(repository.recordAuditEvent.mock.calls),
+    ).not.toContain('access-token');
   });
 });
