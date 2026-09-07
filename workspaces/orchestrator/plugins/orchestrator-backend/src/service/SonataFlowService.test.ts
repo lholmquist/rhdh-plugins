@@ -490,26 +490,8 @@ describe('SonataFlowService', () => {
       );
     });
 
-    it('resolves provider grant references with the Orchestrator service identity', async () => {
-      const caller = {
-        principal: { type: 'service', subject: 'orchestrator' },
-      } as any;
-      const auth = {
-        getOwnServiceCredentials: jest.fn().mockResolvedValue(caller),
-      } as any;
-      const providerTokenGrantResolver = {
-        getAccessToken: jest.fn().mockResolvedValue({
-          accessToken: 'resolved-provider-token',
-          scopes: ['repo'],
-        }),
-      };
-      const service = new SonataFlowService(
-        dataIndexServiceMock,
-        loggerMock,
-        undefined,
-        providerTokenGrantResolver,
-        auth,
-      );
+    it('forwards opaque provider grant references without resolving token material', async () => {
+      const service = new SonataFlowService(dataIndexServiceMock, loggerMock);
       setupTest({ ok: true, json: { id: definitionId } });
 
       await service.executeWorkflow({
@@ -519,27 +501,24 @@ describe('SonataFlowService', () => {
         providerTokenGrants: [{ grantId: 'grant-1', provider: 'github' }],
       });
 
-      expect(auth.getOwnServiceCredentials).toHaveBeenCalledTimes(1);
-      expect(providerTokenGrantResolver.getAccessToken).toHaveBeenCalledWith({
-        grantId: 'grant-1',
-        provider: 'github',
-        caller,
-      });
       expect(fetch).toHaveBeenCalledWith(
         urlToFetch,
         expect.objectContaining({
           headers: {
             'Content-Type': 'application/json',
-            'X-Authorization-Github': 'resolved-provider-token',
+            'X-Provider-Token-Grants':
+              '[{"grantId":"grant-1","provider":"github"}]',
           },
         }),
       );
       expect(JSON.stringify((fetch as jest.Mock).mock.calls)).not.toContain(
-        'grant-1',
+        'resolved-provider-token',
       );
     });
 
-    it('rejects provider grants when no resolver is configured', async () => {
+    it('forwards provider grant references without a local resolver', async () => {
+      setupTest({ ok: true, json: { id: definitionId } });
+
       await expect(
         sonataFlowService.executeWorkflow({
           definitionId,
@@ -547,10 +526,16 @@ describe('SonataFlowService', () => {
           inputData,
           providerTokenGrants: [{ grantId: 'grant-1', provider: 'github' }],
         }),
-      ).rejects.toThrow(
-        'Provider token grant execution is not configured for Orchestrator',
+      ).resolves.toEqual({ id: definitionId });
+      expect(fetch).toHaveBeenCalledWith(
+        urlToFetch,
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'X-Provider-Token-Grants':
+              '[{"grantId":"grant-1","provider":"github"}]',
+          }),
+        }),
       );
-      expect(fetch).not.toHaveBeenCalled();
     });
   });
 
@@ -624,6 +609,28 @@ describe('SonataFlowService', () => {
         },
       });
       expect(result).toBe(true);
+    });
+
+    it('forwards opaque provider grant references without resolving token material', async () => {
+      setupTest({ ok: true, json: {} });
+
+      const service = new SonataFlowService(dataIndexServiceMock, loggerMock);
+
+      await service.retriggerInstance({
+        definitionId,
+        instanceId,
+        serviceUrl,
+        providerTokenGrants: [{ grantId: 'grant-1', provider: 'github' }],
+      });
+
+      expect(fetch).toHaveBeenCalledWith(urlToFetch, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Provider-Token-Grants':
+            '[{"grantId":"grant-1","provider":"github"}]',
+        },
+      });
     });
 
     it('should handle errors when retriggering a workflow instance', async () => {
