@@ -63,3 +63,16 @@ disconnect a provider. The unauthenticated health check is
 SQLite database and must not be reused as a production configuration. The
 local host does not register a provider adapter unless these provider settings
 are supplied.
+
+The sample host also includes the Orchestrator frontend and backend setup. Its
+Podman configuration starts a local SonataFlow dev-mode container, clones the
+sample workflow repository into `packages/backend/.devModeTemp`, and uses
+`host.containers.internal` for SonataFlow notification callbacks. Kafka is not
+configured, so event-based workflow execution is intentionally disabled.
+
+Run the backend with Podman available on the host:
+
+```bash
+SECURE_TOKEN_STORAGE_ENCRYPTION_KEY="$(node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))")" \
+  yarn workspace backend start --config ../../app-config.yaml
+```
