@@ -44,6 +44,7 @@ All URIs are relative to *http://localhost*
  - [ProcessInstanceErrorDTO](./Models/ProcessInstanceErrorDTO.md)
  - [ProcessInstanceListResultDTO](./Models/ProcessInstanceListResultDTO.md)
  - [ProcessInstanceStatusDTO](./Models/ProcessInstanceStatusDTO.md)
+ - [ProviderTokenGrantReference](./Models/ProviderTokenGrantReference.md)
  - [RetriggerInstanceRequestDTO](./Models/RetriggerInstanceRequestDTO.md)
  - [SearchRequest](./Models/SearchRequest.md)
  - [WorkflowAvailabilityResponseDTO](./Models/WorkflowAvailabilityResponseDTO.md)

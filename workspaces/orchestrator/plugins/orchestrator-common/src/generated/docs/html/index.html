@@ -888,6 +888,14 @@ ul.nav-tabs {
         "$ref" : "#/components/schemas/AuthToken"
       }
     },
+    "providerTokenGrants" : {
+      "minItems" : 0,
+      "type" : "array",
+      "description" : "Opaque provider grant references for call-time token retrieval. These references do not contain provider token material.",
+      "items" : {
+        "$ref" : "#/components/schemas/ProviderTokenGrantReference"
+      }
+    },
     "targetEntity" : {
       "type" : "string",
       "description" : "The entity string identifier to execute the workflow for"
@@ -1170,6 +1178,23 @@ ul.nav-tabs {
   "description" : "Status of the workflow run",
   "enum" : [ "ACTIVE", "ERROR", "COMPLETED", "ABORTED", "SUSPENDED", "PENDING" ]
 };
+    defs["ProviderTokenGrantReference"] = {
+  "required" : [ "grantId", "provider" ],
+  "properties" : {
+    "grantId" : {
+      "minLength" : 1,
+      "type" : "string",
+      "description" : "Opaque secure-token-storage grant identifier."
+    },
+    "provider" : {
+      "minLength" : 1,
+      "type" : "string",
+      "description" : "Provider identifier associated with the grant."
+    }
+  },
+  "additionalProperties" : false,
+  "description" : "An opaque reference to a user-approved provider token grant."
+};
     defs["RetriggerInstanceRequestDTO"] = {
   "properties" : {
     "authTokens" : {
@@ -1177,6 +1202,14 @@ ul.nav-tabs {
       "type" : "array",
       "items" : {
         "$ref" : "#/components/schemas/AuthToken"
+      }
+    },
+    "providerTokenGrants" : {
+      "minItems" : 0,
+      "type" : "array",
+      "description" : "Opaque provider grant references for call-time token retrieval. These references do not contain provider token material.",
+      "items" : {
+        "$ref" : "#/components/schemas/ProviderTokenGrantReference"
       }
     }
   }
@@ -1993,7 +2026,14 @@ The identifier of the workflow instance to abort.
     &quot;provider&quot; : &quot;provider&quot;,
     &quot;token&quot; : &quot;token&quot;
   } ],
-  &quot;targetEntity&quot; : &quot;targetEntity&quot;
+  &quot;targetEntity&quot; : &quot;targetEntity&quot;,
+  &quot;providerTokenGrants&quot; : [ {
+    &quot;grantId&quot; : &quot;grantId&quot;,
+    &quot;provider&quot; : &quot;provider&quot;
+  }, {
+    &quot;grantId&quot; : &quot;grantId&quot;,
+    &quot;provider&quot; : &quot;provider&quot;
+  } ]
 }'
 </code></pre>
                           </div>
@@ -7240,6 +7280,13 @@ ID of the workflow to fetch
   }, {
     &quot;provider&quot; : &quot;provider&quot;,
     &quot;token&quot; : &quot;token&quot;
+  } ],
+  &quot;providerTokenGrants&quot; : [ {
+    &quot;grantId&quot; : &quot;grantId&quot;,
+    &quot;provider&quot; : &quot;provider&quot;
+  }, {
+    &quot;grantId&quot; : &quot;grantId&quot;,
+    &quot;provider&quot; : &quot;provider&quot;
   } ]
 }'
 </code></pre>

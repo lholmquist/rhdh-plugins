@@ -15,10 +15,13 @@
  */
 
 import type {
+  AuthService,
   LoggerService,
   SchedulerService,
 } from '@backstage/backend-plugin-api';
 import type { Config } from '@backstage/config';
+
+import type { ProviderTokenGrantResolver } from '@red-hat-developer-hub/backstage-plugin-orchestrator-node';
 
 import { WorkflowLogsProvidersRegistry } from '../providers/WorkflowLogsProvidersRegistry';
 import { OrchestratorKafkaServiceOptions } from '../types/kafka';
@@ -33,11 +36,17 @@ export interface PublicServices {
   orchestratorService: OrchestratorService;
 }
 
+export interface PublicServicesOptions {
+  auth?: AuthService;
+  providerTokenGrantResolver?: ProviderTokenGrantResolver;
+}
+
 export function initPublicServices(
   logger: LoggerService,
   config: Config,
   scheduler: SchedulerService,
   workflowLogsProvidersRegistry: WorkflowLogsProvidersRegistry,
+  options: PublicServicesOptions = {},
 ): PublicServices {
   const dataIndexUrl = config.getString('orchestrator.dataIndexService.url');
   const orchestratorKafka: OrchestratorKafkaServiceOptions | undefined =
@@ -47,6 +56,8 @@ export function initPublicServices(
     dataIndexService,
     logger,
     orchestratorKafka,
+    options.providerTokenGrantResolver,
+    options.auth,
   );
 
   const workflowCacheService = new WorkflowCacheService(
