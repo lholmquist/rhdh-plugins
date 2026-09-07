@@ -81,7 +81,6 @@ export const orchestratorPlugin = createBackendPlugin({
     });
     env.registerInit({
       deps: {
-        auth: coreServices.auth,
         logger: coreServices.logger,
         auditor: coreServices.auditor,
         config: coreServices.rootConfig,
@@ -102,7 +101,6 @@ export const orchestratorPlugin = createBackendPlugin({
           actionsRegistry,
           permissions,
           userInfo,
-          auth,
         } = props;
 
         const publicServices = initPublicServices(
@@ -110,7 +108,7 @@ export const orchestratorPlugin = createBackendPlugin({
           props.config,
           props.scheduler,
           workflowLogsProvidersRegistry,
-          { auth, providerTokenGrantResolver },
+          { providerTokenGrantResolver },
         );
 
         permissionsRegistry.addResourceType({

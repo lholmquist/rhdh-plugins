@@ -48,7 +48,16 @@
   },
   "resolutions": {
     "@types/react": "^18",
-    "@types/react-dom": "^18"
+    "@types/react-dom": "^18",
+    "@red-hat-developer-hub/backstage-plugin-orchestrator": "portal:../orchestrator/plugins/orchestrator",
+    "@red-hat-developer-hub/backstage-plugin-orchestrator-backend": "portal:../orchestrator/plugins/orchestrator-backend",
+    "@red-hat-developer-hub/backstage-plugin-orchestrator-backend-module-loki": "portal:../orchestrator/plugins/orchestrator-backend-module-loki",
+    "@red-hat-developer-hub/backstage-plugin-orchestrator-common": "portal:../orchestrator/plugins/orchestrator-common",
+    "@red-hat-developer-hub/backstage-plugin-orchestrator-form-api": "portal:../orchestrator/plugins/orchestrator-form-api",
+    "@red-hat-developer-hub/backstage-plugin-orchestrator-form-react": "portal:../orchestrator/plugins/orchestrator-form-react",
+    "@red-hat-developer-hub/backstage-plugin-orchestrator-form-widgets": "portal:../orchestrator/plugins/orchestrator-form-widgets",
+    "@red-hat-developer-hub/backstage-plugin-orchestrator-node": "portal:../orchestrator/plugins/orchestrator-node",
+    "@red-hat-developer-hub/backstage-plugin-scaffolder-backend-module-orchestrator": "portal:../orchestrator/plugins/scaffolder-backend-module-orchestrator"
   },
   "prettier": "@backstage/cli/config/prettier",
   "lint-staged": {
