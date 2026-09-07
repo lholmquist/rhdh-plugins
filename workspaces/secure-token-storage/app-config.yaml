@@ -8,6 +8,13 @@ organization:
 
 backend:
   baseUrl: http://localhost:7007
+  auth:
+    externalAccess:
+      - type: static
+        options:
+          # Local development-only credential used by SonataFlow notifications.
+          token: bXljdXJscGFzc3dkCg== # NOSONAR
+          subject: my-external-feed
   listen:
     port: 7007
   cors:
@@ -29,6 +36,23 @@ catalog:
   locations:
     - type: file
       target: ../../catalog-info.yaml
+
+orchestrator:
+  # The sample starts SonataFlow as a Podman container.
+  sonataFlowService:
+    runtime: podman
+    baseUrl: http://localhost
+    port: 8899
+    autoStart: true
+    # This is a local development-only value, matching the upstream example.
+    notificationsBearerToken: bXljdXJscGFzc3dkCg== # NOSONAR
+    # Podman containers reach the host backend through this hostname.
+    notificationsUrl: http://host.containers.internal:7007
+    workflowsSource:
+      gitRepositoryUrl: https://github.com/rhdhorchestrator/backstage-orchestrator-workflows.git
+      localPath: ./.devModeTemp/repository
+  dataIndexService:
+    url: http://localhost:8899
 
 secureTokenStorage:
   enabled: true
