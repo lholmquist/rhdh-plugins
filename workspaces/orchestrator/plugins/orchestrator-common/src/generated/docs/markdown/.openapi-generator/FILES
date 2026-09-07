@@ -18,6 +18,7 @@ Models/ProcessInstanceDTO.md
 Models/ProcessInstanceErrorDTO.md
 Models/ProcessInstanceListResultDTO.md
 Models/ProcessInstanceStatusDTO.md
+Models/ProviderTokenGrantReference.md
 Models/RetriggerInstanceRequestDTO.md
 Models/SearchRequest.md
 Models/WorkflowAvailabilityResponseDTO.md

@@ -12,6 +12,9 @@ const _default: BackendFeature;
 export default _default;
 
 // @public
+export const secureTokenStorageOrchestratorModule: BackendFeature;
+
+// @public
 export const secureTokenStoragePlugin: BackendFeature;
 
 // @public

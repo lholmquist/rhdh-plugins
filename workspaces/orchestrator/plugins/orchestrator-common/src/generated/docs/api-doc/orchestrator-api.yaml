@@ -701,6 +701,12 @@ spec:
                 $ref: '#/components/schemas/AuthToken'
               minItems: 0
               additionalProperties: true
+            providerTokenGrants:
+              type: array
+              description: Opaque provider grant references for call-time token retrieval. These references do not contain provider token material.
+              items:
+                $ref: '#/components/schemas/ProviderTokenGrantReference'
+              minItems: 0
             targetEntity:
               type: string
               description: The entity string identifier to execute the workflow for
@@ -713,6 +719,28 @@ spec:
                 $ref: '#/components/schemas/AuthToken'
               minItems: 0
               additionalProperties: true
+            providerTokenGrants:
+              type: array
+              description: Opaque provider grant references for call-time token retrieval. These references do not contain provider token material.
+              items:
+                $ref: '#/components/schemas/ProviderTokenGrantReference'
+              minItems: 0
+        ProviderTokenGrantReference:
+          type: object
+          description: An opaque reference to a user-approved provider token grant.
+          properties:
+            grantId:
+              type: string
+              minLength: 1
+              description: Opaque secure-token-storage grant identifier.
+            provider:
+              type: string
+              minLength: 1
+              description: Provider identifier associated with the grant.
+          required:
+            - grantId
+            - provider
+          additionalProperties: false
         AuthToken:
           type: object
           properties:

@@ -23,8 +23,10 @@ import { createConditionTransformer } from '@backstage/plugin-permission-node';
 
 import { orchestratorPermissions } from '@red-hat-developer-hub/backstage-plugin-orchestrator-common';
 import {
+  providerTokenGrantExtensionPoint,
   WorkflowLogProvider,
   workflowLogsExtensionEndpoint,
+  type ProviderTokenGrantResolver,
 } from '@red-hat-developer-hub/backstage-plugin-orchestrator-node';
 
 import { createOrchestratorActions } from './actions';
@@ -45,6 +47,18 @@ export const orchestratorPlugin = createBackendPlugin({
   pluginId: 'orchestrator',
   register(env) {
     const workflowLogsProvidersRegistry = new WorkflowLogsProvidersRegistry();
+    let registeredProviderTokenGrantResolver:
+      ProviderTokenGrantResolver | undefined;
+    const providerTokenGrantResolver: ProviderTokenGrantResolver = {
+      getAccessToken(options) {
+        if (!registeredProviderTokenGrantResolver) {
+          throw new Error(
+            'Provider token grant execution is not configured for Orchestrator',
+          );
+        }
+        return registeredProviderTokenGrantResolver.getAccessToken(options);
+      },
+    };
 
     env.registerExtensionPoint(workflowLogsExtensionEndpoint, {
       addWorkflowLogProvider(
@@ -55,8 +69,19 @@ export const orchestratorPlugin = createBackendPlugin({
         });
       },
     });
+    env.registerExtensionPoint(providerTokenGrantExtensionPoint, {
+      setProviderTokenGrantResolver(resolver) {
+        if (registeredProviderTokenGrantResolver) {
+          throw new Error(
+            'Provider token grant resolver is already registered',
+          );
+        }
+        registeredProviderTokenGrantResolver = resolver;
+      },
+    });
     env.registerInit({
       deps: {
+        auth: coreServices.auth,
         logger: coreServices.logger,
         auditor: coreServices.auditor,
         config: coreServices.rootConfig,
@@ -77,6 +102,7 @@ export const orchestratorPlugin = createBackendPlugin({
           actionsRegistry,
           permissions,
           userInfo,
+          auth,
         } = props;
 
         const publicServices = initPublicServices(
@@ -84,6 +110,7 @@ export const orchestratorPlugin = createBackendPlugin({
           props.config,
           props.scheduler,
           workflowLogsProvidersRegistry,
+          { auth, providerTokenGrantResolver },
         );
 
         permissionsRegistry.addResourceType({

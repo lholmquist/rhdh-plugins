@@ -298,6 +298,7 @@ export class V2 {
             targetEntity: executeWorkflowRequestDTO.targetEntity,
           },
           authTokens: executeWorkflowRequestDTO.authTokens as Array<AuthToken>,
+          providerTokenGrants: executeWorkflowRequestDTO.providerTokenGrants,
           backstageToken,
         });
 
@@ -359,6 +360,7 @@ export class V2 {
           targetEntity: executeWorkflowRequestDTO.targetEntity,
         },
         authTokens: executeWorkflowRequestDTO.authTokens as Array<AuthToken>,
+        providerTokenGrants: executeWorkflowRequestDTO.providerTokenGrants,
         serviceUrl: definition.serviceUrl,
         backstageToken,
       });
@@ -405,6 +407,7 @@ export class V2 {
       instanceId: instanceId,
       serviceUrl: definition.serviceUrl,
       authTokens: retriggerInstanceRequestDTO.authTokens as Array<AuthToken>,
+      providerTokenGrants: retriggerInstanceRequestDTO.providerTokenGrants,
       backstageToken,
     });
 

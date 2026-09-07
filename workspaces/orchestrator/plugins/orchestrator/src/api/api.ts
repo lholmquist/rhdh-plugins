@@ -27,6 +27,7 @@ import {
   PaginationInfoDTO,
   ProcessInstanceDTO,
   ProcessInstanceListResultDTO,
+  ProviderTokenGrantReference,
   WorkflowInstanceLogsDTO,
   WorkflowOverviewDTO,
   WorkflowOverviewListResultDTO,
@@ -39,6 +40,7 @@ export interface OrchestratorApi {
     workflowId: string,
     instanceId: string,
     authTokens?: AuthToken[],
+    providerTokenGrants?: ProviderTokenGrantReference[],
   ): Promise<AxiosResponse<object>>;
 
   executeWorkflow(args: {
@@ -46,6 +48,7 @@ export interface OrchestratorApi {
     parameters: JsonObject;
     authTokens: AuthToken[];
     businessKey?: string;
+    providerTokenGrants?: ProviderTokenGrantReference[];
     targetEntity?: string;
   }): Promise<AxiosResponse<ExecuteWorkflowResponseDTO>>;
 
