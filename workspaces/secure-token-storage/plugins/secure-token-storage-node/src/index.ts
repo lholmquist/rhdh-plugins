@@ -112,6 +112,42 @@ export interface ProviderConnectionResult {
 }
 
 /**
+ * A user-owned grant returned by the broker.
+ *
+ * @public
+ */
+export interface TokenGrant {
+  /** Opaque grant identifier. */
+  grantId: string;
+  /** Verified service subject bound to the grant. */
+  callerSubject: string;
+  /** Provider identifier. */
+  provider: string;
+  /** Scopes approved for the caller. */
+  scopes: string[];
+  /** Optional workflow or instance binding. */
+  workflowInstanceId?: string;
+  /** Time at which the grant was created. */
+  createdAt: Date;
+  /** Time at which the grant expires. */
+  expiresAt: Date;
+  /** Time at which the grant was revoked, when applicable. */
+  revokedAt?: Date;
+}
+
+/**
+ * Result of disconnecting a provider connection.
+ *
+ * @public
+ */
+export interface ProviderDisconnectResult {
+  /** Provider identifier. */
+  provider: string;
+  /** Number of active grants revoked with the connection. */
+  revokedGrantCount: number;
+}
+
+/**
  * A user decision for a completed provider connection.
  *
  * @public
@@ -218,6 +254,16 @@ export interface SecureTokenStorageService {
     sessionId: string;
     userEntityRef: string;
   }): Promise<void>;
+  /** Lists grants owned by a user, optionally filtered by provider. */
+  listGrants(options: {
+    userEntityRef: string;
+    provider?: string;
+  }): Promise<TokenGrant[]>;
+  /** Disconnects a provider and revokes all of its user grants. */
+  disconnectProvider(options: {
+    userEntityRef: string;
+    provider: string;
+  }): Promise<ProviderDisconnectResult>;
   /** Retrieves or refreshes an access token for a verified service caller. */
   getAccessToken(options: {
     grantId: string;
