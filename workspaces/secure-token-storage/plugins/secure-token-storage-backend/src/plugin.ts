@@ -8,7 +8,7 @@ import {
   createBackendPlugin,
 } from '@backstage/backend-plugin-api';
 import { secureTokenStorageServiceRef } from '@red-hat-developer-hub/backstage-plugin-secure-token-storage-node';
-import Router from 'express-promise-router';
+import { createRouter } from './router';
 
 /**
  * Backend plugin for the secure token storage foundation.
@@ -21,17 +21,19 @@ export const secureTokenStoragePlugin = createBackendPlugin({
     env.registerInit({
       deps: {
         httpRouter: coreServices.httpRouter,
+        httpAuth: coreServices.httpAuth,
         secureTokenStorage: secureTokenStorageServiceRef,
       },
-      async init({ httpRouter, secureTokenStorage }) {
-        const router = Router();
-        router.get('/health', async (_req, res) => {
-          res.json(await secureTokenStorage.getStatus());
-        });
-
-        httpRouter.use(router);
+      async init({ httpRouter, httpAuth, secureTokenStorage }) {
+        httpRouter.use(
+          await createRouter({ httpAuth, service: secureTokenStorage }),
+        );
         httpRouter.addAuthPolicy({
           path: '/health',
+          allow: 'unauthenticated',
+        });
+        httpRouter.addAuthPolicy({
+          path: '/connections/:provider/callback',
           allow: 'unauthenticated',
         });
       },
