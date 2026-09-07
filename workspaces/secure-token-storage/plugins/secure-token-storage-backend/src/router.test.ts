@@ -123,6 +123,41 @@ describe('secure token storage router', () => {
     expect(httpAuth.credentials).not.toHaveBeenCalled();
   });
 
+  it('redirects a completed OAuth callback to the consent page when configured', async () => {
+    const httpAuth = {
+      credentials: jest.fn(),
+    } as unknown as jest.Mocked<HttpAuthService>;
+    const service = {
+      completeProviderConnection: jest.fn().mockResolvedValue({
+        sessionId: 'session-1',
+        provider: 'github',
+        userEntityRef: 'user:default/luke',
+        scopes: ['repo', 'read:user'],
+      }),
+    } as unknown as jest.Mocked<SecureTokenStorageService>;
+    const app = express();
+    app.use(
+      '/api/secure-token-storage',
+      await createRouter({
+        httpAuth,
+        service,
+        consentUrl: 'http://localhost:3000/secure-token-storage',
+      }),
+    );
+
+    const response = await request(app)
+      .get('/api/secure-token-storage/connections/github/callback')
+      .query({ state: 'one-time-state', code: 'one-time-code' })
+      .expect(303);
+
+    expect(response.headers.location).toMatch(
+      /http:\/\/localhost:3000\/secure-token-storage/,
+    );
+    expect(response.headers.location).toMatch(/sessionId=session-1/);
+    expect(response.headers.location).toMatch(/provider=github/);
+    expect(response.headers.location).toMatch(/scopes=repo%2Cread%3Auser/);
+  });
+
   it('uses the authenticated user for consent and does not accept a caller subject', async () => {
     const httpAuth = {
       credentials: jest.fn().mockResolvedValue(userCredentials()),

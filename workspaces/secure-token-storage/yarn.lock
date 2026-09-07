@@ -6347,6 +6347,7 @@ __metadata:
     "@backstage/backend-plugin-api": "npm:^1.10.0"
     "@backstage/backend-test-utils": "npm:^1.11.6"
     "@backstage/cli": "npm:^0.36.5"
+    "@red-hat-developer-hub/backstage-plugin-orchestrator-node": "npm:^1.5.0"
     "@red-hat-developer-hub/backstage-plugin-secure-token-storage-node": "workspace:^"
     "@types/express": "npm:^4.17.6"
     "@types/supertest": "npm:^7.0.0"
