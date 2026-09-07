@@ -22,11 +22,18 @@ export const secureTokenStoragePlugin = createBackendPlugin({
       deps: {
         httpRouter: coreServices.httpRouter,
         httpAuth: coreServices.httpAuth,
+        config: coreServices.rootConfig,
         secureTokenStorage: secureTokenStorageServiceRef,
       },
-      async init({ httpRouter, httpAuth, secureTokenStorage }) {
+      async init({ httpRouter, httpAuth, config, secureTokenStorage }) {
         httpRouter.use(
-          await createRouter({ httpAuth, service: secureTokenStorage }),
+          await createRouter({
+            httpAuth,
+            service: secureTokenStorage,
+            consentUrl: config.getOptionalString(
+              'secureTokenStorage.oauth.consentUrl',
+            ),
+          }),
         );
         httpRouter.addAuthPolicy({
           path: '/health',

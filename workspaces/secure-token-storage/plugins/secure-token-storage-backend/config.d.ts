@@ -13,6 +13,8 @@ export interface Config {
     oauth?: {
       /** Exact callback URLs accepted for OAuth connect sessions. */
       allowedRedirectUris: string[];
+      /** Optional frontend URL that receives completed consent sessions. */
+      consentUrl?: string;
       /** Lifetime of a pending OAuth state in seconds. */
       connectSessionTtlSeconds?: number;
       /** Default lifetime of an approved grant in seconds. */

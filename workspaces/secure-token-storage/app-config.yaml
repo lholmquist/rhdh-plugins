@@ -59,6 +59,7 @@ secureTokenStorage:
   allowedCallerSubjects:
     - sonataflow
   oauth:
+    consentUrl: http://localhost:3000/secure-token-storage
     allowedRedirectUris:
       - http://localhost:7007/api/secure-token-storage/connections/github/callback
       - http://localhost:7007/api/secure-token-storage/connections/microsoft/callback
