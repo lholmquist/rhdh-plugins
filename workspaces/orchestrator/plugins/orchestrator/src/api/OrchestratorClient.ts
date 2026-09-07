@@ -36,6 +36,7 @@ import {
   PaginationInfoDTO,
   ProcessInstanceDTO,
   ProcessInstanceListResultDTO,
+  ProviderTokenGrantReference,
   RetriggerInstanceRequestDTO,
   WorkflowInstanceLogsDTO,
   WorkflowOverviewDTO,
@@ -105,6 +106,7 @@ export class OrchestratorClient implements OrchestratorApi {
     workflowId: string;
     parameters: JsonObject;
     authTokens: AuthToken[];
+    providerTokenGrants?: ProviderTokenGrantReference[];
     targetEntity?: string;
   }): Promise<AxiosResponse<ExecuteWorkflowResponseDTO>> {
     const defaultApi = await this.getDefaultAPI();
@@ -116,6 +118,9 @@ export class OrchestratorClient implements OrchestratorApi {
       authTokens: args.authTokens,
       targetEntity: args.targetEntity,
     };
+    if (args.providerTokenGrants) {
+      requestBody.providerTokenGrants = args.providerTokenGrants;
+    }
     try {
       return await defaultApi.executeWorkflow(
         args.workflowId,
@@ -144,6 +149,7 @@ export class OrchestratorClient implements OrchestratorApi {
     workflowId: string,
     instanceId: string,
     authTokens?: AuthToken[],
+    providerTokenGrants?: ProviderTokenGrantReference[],
   ): Promise<AxiosResponse<object>> {
     const defaultApi = await this.getDefaultAPI();
     const reqConfigOption: AxiosRequestConfig =
@@ -152,6 +158,9 @@ export class OrchestratorClient implements OrchestratorApi {
     const requestBody: RetriggerInstanceRequestDTO = {};
     if (authTokens) {
       requestBody.authTokens = authTokens;
+    }
+    if (providerTokenGrants) {
+      requestBody.providerTokenGrants = providerTokenGrants;
     }
 
     try {

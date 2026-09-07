@@ -20,6 +20,7 @@ import {
   ProcessInstance,
   ProcessInstanceDTO,
   ProcessInstanceVariables,
+  ProviderTokenGrantReference,
   WorkflowDefinition,
   WorkflowExecutionResponse,
   WorkflowInfo,
@@ -165,6 +166,7 @@ export class OrchestratorService {
     contextAttribute: string;
     inputData?: ProcessInstanceVariables;
     authTokens?: Array<AuthToken>;
+    providerTokenGrants?: Array<ProviderTokenGrantReference>;
     backstageToken?: string;
   }) {
     return await this.sonataFlowService.executeWorkflowAsCloudEvent(args);
@@ -175,6 +177,7 @@ export class OrchestratorService {
     serviceUrl: string;
     inputData?: ProcessInstanceVariables;
     authTokens?: Array<AuthToken>;
+    providerTokenGrants?: Array<ProviderTokenGrantReference>;
     backstageToken?: string | undefined;
   }): Promise<WorkflowExecutionResponse | undefined> {
     return await this.sonataFlowService.executeWorkflow(args);
@@ -185,6 +188,7 @@ export class OrchestratorService {
     instanceId: string;
     serviceUrl: string;
     authTokens?: Array<AuthToken>;
+    providerTokenGrants?: Array<ProviderTokenGrantReference>;
     backstageToken?: string | undefined;
   }): Promise<boolean | undefined> {
     return this.sonataFlowService.retriggerInstance(args);

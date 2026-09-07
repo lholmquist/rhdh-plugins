@@ -32,6 +32,7 @@ import {
   PaginationInfoDTO,
   ProcessInstanceDTO,
   ProcessInstanceListResultDTO,
+  ProviderTokenGrantReference,
   WorkflowFormatDTO,
   WorkflowOverviewDTO,
   WorkflowOverviewListResultDTO,
@@ -102,6 +103,7 @@ describe('OrchestratorClient', () => {
         workflowId: string;
         parameters: JsonObject;
         authTokens: AuthToken[];
+        providerTokenGrants?: ProviderTokenGrantReference[];
       } = {
         workflowId,
         parameters,
@@ -208,6 +210,38 @@ describe('OrchestratorClient', () => {
           parameters,
         ),
       ).not.toThrow();
+    });
+
+    it('should send opaque provider grant references alongside legacy auth tokens', async () => {
+      const { executeWorkflowSpy, args } = setupTest('execId001', {});
+      const providerTokenGrants: ProviderTokenGrantReference[] = [
+        { grantId: 'grant-1', provider: 'github' },
+      ];
+      args.providerTokenGrants = providerTokenGrants;
+
+      await orchestratorClient.executeWorkflow(args);
+
+      expect(executeWorkflowSpy).toHaveBeenCalledWith(
+        workflowId,
+        {
+          inputData: {},
+          authTokens: [{ provider: 'github', token: 'mock-token' }],
+          providerTokenGrants,
+        },
+        getDefaultTestRequestConfig(),
+      );
+      expect(axios.request).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: JSON.stringify({
+            inputData: {},
+            authTokens: [{ provider: 'github', token: 'mock-token' }],
+            providerTokenGrants,
+          }),
+        }),
+      );
+      expect(
+        JSON.stringify((axios.request as jest.Mock).mock.calls),
+      ).not.toContain('access-token');
     });
   });
   describe('abortWorkflow', () => {
@@ -614,6 +648,39 @@ describe('OrchestratorClient', () => {
         workflowId,
         instanceId,
         { authTokens },
+        getDefaultTestRequestConfig(),
+      );
+    });
+
+    it('should retrigger an instance with opaque provider grant references', async () => {
+      const workflowId = 'workflow123';
+      const instanceId = 'instance123';
+      const providerTokenGrants: ProviderTokenGrantReference[] = [
+        { grantId: 'grant-1', provider: 'github' },
+      ];
+      const retriggerSpy = jest.spyOn(
+        DefaultApi.prototype,
+        'retriggerInstance',
+      );
+      axios.request = jest.fn().mockResolvedValueOnce({
+        data: {},
+        status: 200,
+        statusText: 'OK',
+        headers: {} as RawAxiosResponseHeaders,
+        config: {} as InternalAxiosRequestConfig,
+      });
+
+      await orchestratorClient.retriggerInstance(
+        workflowId,
+        instanceId,
+        undefined,
+        providerTokenGrants,
+      );
+
+      expect(retriggerSpy).toHaveBeenCalledWith(
+        workflowId,
+        instanceId,
+        { providerTokenGrants },
         getDefaultTestRequestConfig(),
       );
     });

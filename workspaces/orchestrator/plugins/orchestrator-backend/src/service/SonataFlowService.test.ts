@@ -489,6 +489,69 @@ describe('SonataFlowService', () => {
         expect.stringContaining('Network Error'),
       );
     });
+
+    it('resolves provider grant references with the Orchestrator service identity', async () => {
+      const caller = {
+        principal: { type: 'service', subject: 'orchestrator' },
+      } as any;
+      const auth = {
+        getOwnServiceCredentials: jest.fn().mockResolvedValue(caller),
+      } as any;
+      const providerTokenGrantResolver = {
+        getAccessToken: jest.fn().mockResolvedValue({
+          accessToken: 'resolved-provider-token',
+          scopes: ['repo'],
+        }),
+      };
+      const service = new SonataFlowService(
+        dataIndexServiceMock,
+        loggerMock,
+        undefined,
+        providerTokenGrantResolver,
+        auth,
+      );
+      setupTest({ ok: true, json: { id: definitionId } });
+
+      await service.executeWorkflow({
+        definitionId,
+        serviceUrl,
+        inputData,
+        providerTokenGrants: [{ grantId: 'grant-1', provider: 'github' }],
+      });
+
+      expect(auth.getOwnServiceCredentials).toHaveBeenCalledTimes(1);
+      expect(providerTokenGrantResolver.getAccessToken).toHaveBeenCalledWith({
+        grantId: 'grant-1',
+        provider: 'github',
+        caller,
+      });
+      expect(fetch).toHaveBeenCalledWith(
+        urlToFetch,
+        expect.objectContaining({
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Authorization-Github': 'resolved-provider-token',
+          },
+        }),
+      );
+      expect(JSON.stringify((fetch as jest.Mock).mock.calls)).not.toContain(
+        'grant-1',
+      );
+    });
+
+    it('rejects provider grants when no resolver is configured', async () => {
+      await expect(
+        sonataFlowService.executeWorkflow({
+          definitionId,
+          serviceUrl,
+          inputData,
+          providerTokenGrants: [{ grantId: 'grant-1', provider: 'github' }],
+        }),
+      ).rejects.toThrow(
+        'Provider token grant execution is not configured for Orchestrator',
+      );
+      expect(fetch).not.toHaveBeenCalled();
+    });
   });
 
   describe('retriggerInstance', () => {

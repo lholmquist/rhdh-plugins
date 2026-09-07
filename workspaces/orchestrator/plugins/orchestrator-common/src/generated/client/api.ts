@@ -80,6 +80,12 @@ export interface ExecuteWorkflowRequestDTO {
      */
     'authTokens'?: Array<AuthToken>;
     /**
+     * Opaque provider grant references for call-time token retrieval. These references do not contain provider token material.
+     * @type {Array<ProviderTokenGrantReference>}
+     * @memberof ExecuteWorkflowRequestDTO
+     */
+    'providerTokenGrants'?: Array<ProviderTokenGrantReference>;
+    /**
      * The entity string identifier to execute the workflow for
      * @type {string}
      * @memberof ExecuteWorkflowRequestDTO
@@ -535,6 +541,25 @@ export type ProcessInstanceStatusDTO = typeof ProcessInstanceStatusDTO[keyof typ
 
 
 /**
+ * An opaque reference to a user-approved provider token grant.
+ * @export
+ * @interface ProviderTokenGrantReference
+ */
+export interface ProviderTokenGrantReference {
+    /**
+     * Opaque secure-token-storage grant identifier.
+     * @type {string}
+     * @memberof ProviderTokenGrantReference
+     */
+    'grantId': string;
+    /**
+     * Provider identifier associated with the grant.
+     * @type {string}
+     * @memberof ProviderTokenGrantReference
+     */
+    'provider': string;
+}
+/**
  * 
  * @export
  * @interface RetriggerInstanceRequestDTO
@@ -546,6 +571,12 @@ export interface RetriggerInstanceRequestDTO {
      * @memberof RetriggerInstanceRequestDTO
      */
     'authTokens'?: Array<AuthToken>;
+    /**
+     * Opaque provider grant references for call-time token retrieval. These references do not contain provider token material.
+     * @type {Array<ProviderTokenGrantReference>}
+     * @memberof RetriggerInstanceRequestDTO
+     */
+    'providerTokenGrants'?: Array<ProviderTokenGrantReference>;
 }
 /**
  * 
