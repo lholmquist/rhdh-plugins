@@ -16,15 +16,20 @@ import {
   SecureTokenStorageError,
   type AccessTokenResult,
   type CreateTokenGrantInput,
+  type ProviderDisconnectResult,
+  type SecureTokenStorageErrorCode,
   type StoreProviderTokenInput,
   type SecureTokenStorageService,
   type SecureTokenStorageStatus,
+  type TokenGrant,
 } from '@red-hat-developer-hub/backstage-plugin-secure-token-storage-node';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { migrate } from './database/migration';
 import {
   TokenStorageRepository,
+  type StoredAuditEvent,
   type StoredConnectSession,
+  type StoredGrant,
 } from './database/repository';
 import { createTokenCipher, TokenCipher, TokenCipherError } from './crypto';
 import { GitHubOAuthAdapter, MicrosoftOAuthAdapter } from './providers';
@@ -84,6 +89,17 @@ const connectVerifierAssociatedData = (sessionId: string): string =>
 
 const sha256Base64Url = (value: string): string =>
   createHash('sha256').update(value, 'utf8').digest('base64url');
+
+const toTokenGrant = (grant: StoredGrant): TokenGrant => ({
+  grantId: grant.id,
+  callerSubject: grant.callerSubject,
+  provider: grant.provider,
+  scopes: grant.scopes,
+  workflowInstanceId: grant.workflowInstanceId,
+  createdAt: grant.createdAt,
+  expiresAt: grant.expiresAt,
+  revokedAt: grant.revokedAt,
+});
 
 const requireServiceSubject = (
   caller: BackstageCredentials<BackstageServicePrincipal>,
@@ -252,7 +268,53 @@ export class DefaultSecureTokenStorageService
       createdAt: this.now(),
       expiresAt: input.expiresAt,
     });
+    await this.recordAudit({
+      eventType: 'grant-created',
+      userEntityRef: input.userEntityRef,
+      provider: input.provider,
+      grantId,
+      callerSubject: input.callerSubject,
+      metadata: { scopeCount: input.scopes.length },
+    });
     return { grantId, expiresAt: input.expiresAt };
+  }
+
+  async listGrants(options: {
+    userEntityRef: string;
+    provider?: string;
+  }): Promise<TokenGrant[]> {
+    this.assertReady();
+    const grants = await this.repository!.listGrants(
+      options.userEntityRef,
+      options.provider,
+    );
+    return grants.map(toTokenGrant);
+  }
+
+  async disconnectProvider(options: {
+    userEntityRef: string;
+    provider: string;
+  }): Promise<ProviderDisconnectResult> {
+    this.assertReady();
+    const disconnected = await this.repository!.disconnectProvider(
+      options.userEntityRef,
+      options.provider,
+      this.now(),
+    );
+    if (!disconnected) {
+      throw new SecureTokenStorageError('connection-not-found');
+    }
+    await this.recordAudit({
+      eventType: 'provider-disconnected',
+      userEntityRef: options.userEntityRef,
+      provider: options.provider,
+      connectionId: disconnected.connectionId,
+      metadata: { revokedGrantCount: disconnected.revokedGrantCount },
+    });
+    return {
+      provider: options.provider,
+      revokedGrantCount: disconnected.revokedGrantCount,
+    };
   }
 
   async startProviderConnection(input: {
@@ -339,9 +401,23 @@ export class DefaultSecureTokenStorageService
       throw new SecureTokenStorageError('connect-session-consumed');
     }
     if (input.providerError) {
+      await this.recordAudit({
+        eventType: 'consent-denied',
+        userEntityRef: session.userEntityRef,
+        provider: session.provider,
+        callerSubject: session.callerSubject,
+        metadata: { reason: 'provider-denied' },
+      });
       throw new SecureTokenStorageError('oauth-consent-denied');
     }
     if (!input.code) {
+      await this.recordAudit({
+        eventType: 'consent-denied',
+        userEntityRef: session.userEntityRef,
+        provider: session.provider,
+        callerSubject: session.callerSubject,
+        metadata: { reason: 'missing-authorization-code' },
+      });
       throw new SecureTokenStorageError('oauth-exchange-failed');
     }
 
@@ -374,6 +450,13 @@ export class DefaultSecureTokenStorageService
         scopes: session.scopes,
       });
     } catch {
+      await this.recordAudit({
+        eventType: 'consent-denied',
+        userEntityRef: session.userEntityRef,
+        provider: session.provider,
+        callerSubject: session.callerSubject,
+        metadata: { reason: 'authorization-code-exchange-failed' },
+      });
       throw new SecureTokenStorageError('oauth-exchange-failed');
     }
 
@@ -382,6 +465,13 @@ export class DefaultSecureTokenStorageService
       scopes.length === 0 ||
       !scopes.every(scope => session.scopes.includes(scope))
     ) {
+      await this.recordAudit({
+        eventType: 'consent-denied',
+        userEntityRef: session.userEntityRef,
+        provider: session.provider,
+        callerSubject: session.callerSubject,
+        metadata: { reason: 'provider-scope-mismatch' },
+      });
       throw new SecureTokenStorageError('oauth-exchange-failed');
     }
     await this.storeProviderToken({
@@ -445,6 +535,14 @@ export class DefaultSecureTokenStorageService
     if (!created) {
       throw new SecureTokenStorageError('consent-not-available');
     }
+    await this.recordAudit({
+      eventType: 'grant-created',
+      userEntityRef: session.userEntityRef,
+      provider: session.provider,
+      grantId,
+      callerSubject: session.callerSubject,
+      metadata: { scopeCount: session.scopes.length },
+    });
     return {
       grantId,
       provider: session.provider,
@@ -471,6 +569,13 @@ export class DefaultSecureTokenStorageService
     ) {
       throw new SecureTokenStorageError('consent-not-available');
     }
+    await this.recordAudit({
+      eventType: 'consent-denied',
+      userEntityRef: session.userEntityRef,
+      provider: session.provider,
+      callerSubject: session.callerSubject,
+      metadata: { reason: 'user-rejected' },
+    });
   }
 
   async getAccessToken(options: {
@@ -480,18 +585,30 @@ export class DefaultSecureTokenStorageService
   }): Promise<AccessTokenResult> {
     this.assertReady();
     const now = this.now();
+    const callerSubject = requireServiceSubject(options.caller);
     const grant = await this.repository!.findGrant(options.grantId);
     if (!grant || grant.provider !== options.provider) {
-      throw new SecureTokenStorageError('grant-not-found');
+      return this.denyGrantAccess(options, callerSubject, 'grant-not-found');
     }
     if (grant.revokedAt) {
-      throw new SecureTokenStorageError('grant-revoked');
+      return this.denyGrantAccess(options, callerSubject, 'grant-revoked', {
+        userEntityRef: grant.userEntityRef,
+      });
     }
     if (grant.expiresAt <= now) {
-      throw new SecureTokenStorageError('grant-expired');
+      return this.denyGrantAccess(options, callerSubject, 'grant-expired', {
+        userEntityRef: grant.userEntityRef,
+      });
     }
-    if (grant.callerSubject !== requireServiceSubject(options.caller)) {
-      throw new SecureTokenStorageError('caller-not-authorized');
+    if (grant.callerSubject !== callerSubject) {
+      return this.denyGrantAccess(
+        options,
+        callerSubject,
+        'caller-not-authorized',
+        {
+          userEntityRef: grant.userEntityRef,
+        },
+      );
     }
 
     const connection = await this.repository!.findConnection(
@@ -499,7 +616,14 @@ export class DefaultSecureTokenStorageService
       grant.provider,
     );
     if (!connection || connection.revokedAt) {
-      throw new SecureTokenStorageError('connection-not-found');
+      return this.denyGrantAccess(
+        options,
+        callerSubject,
+        'connection-not-found',
+        {
+          userEntityRef: grant.userEntityRef,
+        },
+      );
     }
 
     let accessToken: string;
@@ -510,7 +634,12 @@ export class DefaultSecureTokenStorageService
       );
     } catch (error) {
       if (error instanceof TokenCipherError) {
-        throw new SecureTokenStorageError('token-integrity-failed');
+        return this.denyGrantAccess(
+          options,
+          callerSubject,
+          'token-integrity-failed',
+          { userEntityRef: grant.userEntityRef },
+        );
       }
       throw error;
     }
@@ -520,6 +649,15 @@ export class DefaultSecureTokenStorageService
       connection.accessTokenExpiresAt > now
     ) {
       await this.repository!.markConnectionUsed(connection.id, now);
+      await this.recordAudit({
+        eventType: 'grant-used',
+        userEntityRef: grant.userEntityRef,
+        provider: grant.provider,
+        connectionId: connection.id,
+        grantId: grant.id,
+        callerSubject,
+        metadata: { refreshed: false },
+      });
       return {
         accessToken,
         expiresAt: connection.accessTokenExpiresAt,
@@ -528,20 +666,31 @@ export class DefaultSecureTokenStorageService
     }
 
     if (!connection.refreshToken) {
-      throw new SecureTokenStorageError('provider-refresh-required');
+      return this.denyGrantAccess(
+        options,
+        callerSubject,
+        'provider-refresh-required',
+        { userEntityRef: grant.userEntityRef },
+      );
     }
     const refresher = this.refreshers.get(grant.provider);
     if (!refresher) {
-      throw new SecureTokenStorageError('provider-refresh-required');
+      return this.denyGrantAccess(
+        options,
+        callerSubject,
+        'provider-refresh-required',
+        { userEntityRef: grant.userEntityRef },
+      );
     }
 
     let refreshToken: string;
+    let refreshed: Awaited<ReturnType<ProviderTokenRefresher['refresh']>>;
     try {
       refreshToken = this.cipher!.decrypt(
         connection.refreshToken,
         associatedData(connection.id, 'refresh'),
       );
-      const refreshed = await refresher.refresh({
+      refreshed = await refresher.refresh({
         provider: grant.provider,
         refreshToken,
         scopes: grant.scopes,
@@ -565,18 +714,51 @@ export class DefaultSecureTokenStorageService
         },
         now,
       );
-      return {
-        accessToken: refreshed.accessToken,
-        expiresAt: refreshed.expiresAt,
-        scopes: grant.scopes,
-      };
     } catch (error) {
       if (error instanceof TokenCipherError) {
-        throw new SecureTokenStorageError('token-integrity-failed');
+        return this.denyGrantAccess(
+          options,
+          callerSubject,
+          'token-integrity-failed',
+          { userEntityRef: grant.userEntityRef },
+        );
       }
       if (error instanceof SecureTokenStorageError) throw error;
+      await this.recordAudit({
+        eventType: 'token-refresh-failed',
+        userEntityRef: grant.userEntityRef,
+        provider: grant.provider,
+        connectionId: connection.id,
+        grantId: grant.id,
+        callerSubject,
+        metadata: { reason: 'provider-refresh-failed' },
+      });
       throw new SecureTokenStorageError('provider-refresh-failed');
     }
+
+    await this.recordAudit({
+      eventType: 'token-refreshed',
+      userEntityRef: grant.userEntityRef,
+      provider: grant.provider,
+      connectionId: connection.id,
+      grantId: grant.id,
+      callerSubject,
+      metadata: { rotated: true },
+    });
+    await this.recordAudit({
+      eventType: 'grant-used',
+      userEntityRef: grant.userEntityRef,
+      provider: grant.provider,
+      connectionId: connection.id,
+      grantId: grant.id,
+      callerSubject,
+      metadata: { refreshed: true },
+    });
+    return {
+      accessToken: refreshed.accessToken,
+      expiresAt: refreshed.expiresAt,
+      scopes: grant.scopes,
+    };
   }
 
   async revokeGrant(options: {
@@ -584,7 +766,63 @@ export class DefaultSecureTokenStorageService
     userEntityRef: string;
   }): Promise<void> {
     this.assertReady();
-    await this.repository!.revokeGrant(options.grantId, options.userEntityRef);
+    const grant = await this.repository!.findGrant(options.grantId);
+    if (!grant || grant.userEntityRef !== options.userEntityRef) {
+      await this.recordAudit({
+        eventType: 'grant-denied',
+        userEntityRef: options.userEntityRef,
+        grantId: options.grantId,
+        metadata: { reason: 'grant-not-found' },
+      });
+      throw new SecureTokenStorageError('grant-not-found');
+    }
+    if (grant.revokedAt) return;
+    if (
+      await this.repository!.revokeGrant(
+        options.grantId,
+        options.userEntityRef,
+        this.now(),
+      )
+    ) {
+      await this.recordAudit({
+        eventType: 'grant-revoked',
+        userEntityRef: grant.userEntityRef,
+        provider: grant.provider,
+        grantId: grant.id,
+        callerSubject: grant.callerSubject,
+        metadata: { reason: 'user-revoked' },
+      });
+    }
+  }
+
+  private async denyGrantAccess(
+    options: {
+      grantId: string;
+      provider: string;
+    },
+    callerSubject: string,
+    code: SecureTokenStorageErrorCode,
+    context: { userEntityRef?: string } = {},
+  ): Promise<never> {
+    await this.recordAudit({
+      eventType: 'grant-denied',
+      userEntityRef: context.userEntityRef,
+      provider: options.provider,
+      grantId: options.grantId,
+      callerSubject,
+      metadata: { reason: code },
+    });
+    throw new SecureTokenStorageError(code);
+  }
+
+  private async recordAudit(
+    event: Omit<StoredAuditEvent, 'id' | 'occurredAt'>,
+  ): Promise<void> {
+    await this.repository!.recordAuditEvent({
+      ...event,
+      id: randomUUID(),
+      occurredAt: this.now(),
+    });
   }
 
   private assertReady(): void {

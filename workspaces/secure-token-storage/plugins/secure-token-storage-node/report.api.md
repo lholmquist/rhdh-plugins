@@ -43,6 +43,12 @@ export interface ProviderConnectionStart {
 }
 
 // @public
+export interface ProviderDisconnectResult {
+  provider: string;
+  revokedGrantCount: number;
+}
+
+// @public
 export class SecureTokenStorageError extends Error {
   constructor(code: SecureTokenStorageErrorCode);
   readonly code: SecureTokenStorageErrorCode;
@@ -90,12 +96,20 @@ export interface SecureTokenStorageService {
     grantId: string;
     expiresAt: Date;
   }>;
+  disconnectProvider(options: {
+    userEntityRef: string;
+    provider: string;
+  }): Promise<ProviderDisconnectResult>;
   getAccessToken(options: {
     grantId: string;
     provider: string;
     caller: BackstageCredentials<BackstageServicePrincipal>;
   }): Promise<AccessTokenResult>;
   getStatus(): Promise<SecureTokenStorageStatus>;
+  listGrants(options: {
+    userEntityRef: string;
+    provider?: string;
+  }): Promise<TokenGrant[]>;
   rejectProviderConnection(input: {
     sessionId: string;
     userEntityRef: string;
@@ -139,6 +153,18 @@ export interface StoreProviderTokenInput {
   refreshToken?: string;
   scopes: string[];
   userEntityRef: string;
+}
+
+// @public
+export interface TokenGrant {
+  callerSubject: string;
+  createdAt: Date;
+  expiresAt: Date;
+  grantId: string;
+  provider: string;
+  revokedAt?: Date;
+  scopes: string[];
+  workflowInstanceId?: string;
 }
 
 // (No @packageDocumentation comment for this package)
