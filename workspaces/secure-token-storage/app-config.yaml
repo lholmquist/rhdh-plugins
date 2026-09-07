@@ -1,0 +1,42 @@
+app:
+  title: Secure Token Storage Test Host
+  baseUrl: http://localhost:3000
+  packages: all
+
+organization:
+  name: Red Hat
+
+backend:
+  baseUrl: http://localhost:7007
+  listen:
+    port: 7007
+  cors:
+    origin: http://localhost:3000
+    methods: [GET, HEAD, PATCH, POST, PUT, DELETE]
+    credentials: true
+  database:
+    client: better-sqlite3
+    connection: ':memory:'
+
+auth:
+  environment: development
+  providers:
+    guest: {}
+
+catalog:
+  rules:
+    - allow: [Component, System, Group, Resource, Location, API]
+  locations:
+    - type: file
+      target: ../../catalog-info.yaml
+
+secureTokenStorage:
+  enabled: true
+  allowedCallerSubjects:
+    - sonataflow
+  oauth:
+    allowedRedirectUris:
+      - http://localhost:7007/api/secure-token-storage/connections/github/callback
+      - http://localhost:7007/api/secure-token-storage/connections/microsoft/callback
+  encryption:
+    activeKey: ${SECURE_TOKEN_STORAGE_ENCRYPTION_KEY}
