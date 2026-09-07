@@ -71,6 +71,7 @@ function queryString(value: unknown): string | undefined {
 export async function createRouter(options: {
   httpAuth: HttpAuthService;
   service: SecureTokenStorageService;
+  consentUrl?: string;
 }) {
   const router = Router();
   router.use(express.json());
@@ -135,6 +136,16 @@ export async function createRouter(options: {
         code,
         providerError: Boolean(providerError),
       });
+
+      if (options.consentUrl) {
+        const consentUrl = new URL(options.consentUrl);
+        consentUrl.searchParams.set('sessionId', connection.sessionId);
+        consentUrl.searchParams.set('provider', connection.provider);
+        consentUrl.searchParams.set('scopes', connection.scopes.join(','));
+        response.redirect(303, consentUrl.toString());
+        return;
+      }
+
       response.json({ status: 'connected', ...connection });
     } catch (error) {
       sendSafeError(response, error);

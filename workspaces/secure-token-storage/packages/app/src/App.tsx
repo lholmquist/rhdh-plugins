@@ -11,6 +11,7 @@ import orchestratorPlugin, {
 } from '@red-hat-developer-hub/backstage-plugin-orchestrator';
 import orchestratorFormWidgetsPlugin from '@red-hat-developer-hub/backstage-plugin-orchestrator-form-widgets';
 import { rhdhThemeModule } from '@red-hat-developer-hub/backstage-plugin-theme/alpha';
+import { secureTokenStoragePlugin } from './secureTokenStoragePlugin';
 
 export default createApp({
   features: [
@@ -20,5 +21,6 @@ export default createApp({
     orchestratorPlugin,
     orchestratorTranslationsModule,
     orchestratorFormWidgetsPlugin,
+    secureTokenStoragePlugin,
   ],
 });
