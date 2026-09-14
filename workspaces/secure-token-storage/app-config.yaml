@@ -29,13 +29,46 @@ auth:
   environment: development
   providers:
     guest: {}
+    github:
+      development:
+        clientId: ${GITHUB_CLIENT_ID}
+        clientSecret: ${GITHUB_CLIENT_SECRET}
+        signIn:
+          resolvers:
+            - resolver: usernameMatchingUserEntityName
 
 catalog:
+  import:
+    entityFilename: catalog-info.yaml
+    pullRequestBranchName: backstage-integration
   rules:
-    - allow: [Component, System, Group, Resource, Location, API]
+    - allow: [Component, System, API, Resource, Location, User, Group, Template]
   locations:
+    # Local example data, file locations are relative to the backend process, typically `packages/backend`
     - type: file
-      target: ../../catalog-info.yaml
+      target: ../../examples/entities.yaml
+
+    # Local example templates
+    - type: file
+      target: ../../examples/template/create-pr-with-catalog-info.yaml
+      rules:
+        - allow: [Template]
+
+    # Local example organizational data
+    - type: file
+      target: ../../examples/org.yaml
+      rules:
+        - allow: [User, Group]
+
+    ## Uncomment these lines to add more example data
+    # - type: url
+    #   target: https://github.com/backstage/backstage/blob/master/packages/catalog-model/examples/all.yaml
+
+    ## Uncomment these lines to add an example org
+    - type: url
+      target: https://github.com/backstage/backstage/blob/master/packages/catalog-model/examples/acme-corp.yaml
+      rules:
+        - allow: [User, Group]
 
 orchestrator:
   # The sample starts SonataFlow as a Podman container.
