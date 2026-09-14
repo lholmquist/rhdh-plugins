@@ -49,7 +49,6 @@
   "resolutions": {
     "@types/react": "^18",
     "@types/react-dom": "^18",
-    "@red-hat-developer-hub/backstage-plugin-orchestrator": "portal:../orchestrator/plugins/orchestrator",
     "@red-hat-developer-hub/backstage-plugin-orchestrator-backend": "portal:../orchestrator/plugins/orchestrator-backend",
     "@red-hat-developer-hub/backstage-plugin-orchestrator-backend-module-loki": "portal:../orchestrator/plugins/orchestrator-backend-module-loki",
     "@red-hat-developer-hub/backstage-plugin-orchestrator-common": "portal:../orchestrator/plugins/orchestrator-common",
