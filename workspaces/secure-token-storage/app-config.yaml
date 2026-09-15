@@ -14,7 +14,7 @@ backend:
         options:
           # Local development-only credential used by SonataFlow notifications.
           token: bXljdXJscGFzc3dkCg== # NOSONAR
-          subject: my-external-feed
+          subject: sonataflow
   listen:
     port: 7007
   cors:
@@ -93,6 +93,10 @@ secureTokenStorage:
     - sonataflow
   oauth:
     consentUrl: http://localhost:3000/secure-token-storage
+    providers:
+      github:
+        clientId: ${GITHUB_CLIENT_ID}
+        clientSecret: ${GITHUB_CLIENT_SECRET}
     allowedRedirectUris:
       - http://localhost:7007/api/secure-token-storage/connections/github/callback
       - http://localhost:7007/api/secure-token-storage/connections/microsoft/callback

@@ -129,8 +129,8 @@ type ConnectSessionRow = {
   grant_id?: string;
 };
 
-const asDate = (value: Date | string | undefined): Date | undefined => {
-  if (value === undefined) {
+const asDate = (value: Date | string | null | undefined): Date | undefined => {
+  if (value === undefined || value === null) {
     return undefined;
   }
   return value instanceof Date ? value : new Date(value);
@@ -196,7 +196,7 @@ const fromConnectSessionRow = (
   completedAt: asDate(row.completed_at),
   consentStatus: row.consent_status,
   consentDecidedAt: asDate(row.consent_decided_at),
-  grantId: row.grant_id,
+  grantId: row.grant_id ?? undefined,
 });
 
 /** @internal */

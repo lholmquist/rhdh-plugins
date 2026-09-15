@@ -3,7 +3,7 @@
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  */
-import type { FetchApi } from '@backstage/core-plugin-api';
+import type { DiscoveryApi, FetchApi } from '@backstage/core-plugin-api';
 
 export interface ProviderTokenGrant {
   grantId: string;
@@ -21,13 +21,16 @@ export interface ProviderConnectionGrant {
 }
 
 export class SecureTokenStorageClient {
-  constructor(private readonly fetchApi: FetchApi) {}
+  constructor(
+    private readonly options: {
+      discoveryApi: DiscoveryApi;
+      fetchApi: FetchApi;
+    },
+  ) {}
 
   async listGrants(provider?: string): Promise<ProviderTokenGrant[]> {
     const query = provider ? `?provider=${encodeURIComponent(provider)}` : '';
-    return this.request<ProviderTokenGrant[]>(
-      `/api/secure-token-storage/grants${query}`,
-    );
+    return this.request<ProviderTokenGrant[]>(`/grants${query}`);
   }
 
   async approveConnection(
@@ -35,9 +38,7 @@ export class SecureTokenStorageClient {
     expiresAt?: string,
   ): Promise<ProviderConnectionGrant> {
     return this.request<ProviderConnectionGrant>(
-      `/api/secure-token-storage/connections/${encodeURIComponent(
-        sessionId,
-      )}/consent`,
+      `/connections/${encodeURIComponent(sessionId)}/consent`,
       {
         method: 'POST',
         body: JSON.stringify({
@@ -50,9 +51,7 @@ export class SecureTokenStorageClient {
 
   async rejectConnection(sessionId: string): Promise<void> {
     await this.request<void>(
-      `/api/secure-token-storage/connections/${encodeURIComponent(
-        sessionId,
-      )}/consent`,
+      `/connections/${encodeURIComponent(sessionId)}/consent`,
       {
         method: 'POST',
         body: JSON.stringify({ decision: 'reject' }),
@@ -61,17 +60,14 @@ export class SecureTokenStorageClient {
   }
 
   async revokeGrant(grantId: string): Promise<void> {
-    await this.request<void>(
-      `/api/secure-token-storage/grants/${encodeURIComponent(grantId)}/revoke`,
-      { method: 'POST' },
-    );
+    await this.request<void>(`/grants/${encodeURIComponent(grantId)}/revoke`, {
+      method: 'POST',
+    });
   }
 
   async disconnectProvider(provider: string): Promise<void> {
     await this.request<void>(
-      `/api/secure-token-storage/connections/${encodeURIComponent(
-        provider,
-      )}/disconnect`,
+      `/connections/${encodeURIComponent(provider)}/disconnect`,
       { method: 'POST' },
     );
   }
@@ -86,7 +82,13 @@ export class SecureTokenStorageClient {
           },
         }
       : init;
-    const response = await this.fetchApi.fetch(path, requestInit);
+    const baseUrl = await this.options.discoveryApi.getBaseUrl(
+      'secure-token-storage',
+    );
+    const response = await this.options.fetchApi.fetch(
+      `${baseUrl}${path}`,
+      requestInit,
+    );
 
     if (!response.ok) {
       throw new Error(
