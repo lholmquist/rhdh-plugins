@@ -3,7 +3,11 @@
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  */
-import { fetchApiRef, useApi } from '@backstage/core-plugin-api';
+import {
+  discoveryApiRef,
+  fetchApiRef,
+  useApi,
+} from '@backstage/core-plugin-api';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -38,12 +42,15 @@ function readConsentRequest(): ConsentRequest | undefined {
 }
 
 export function SecureTokenStoragePage() {
+  const discoveryApi = useApi(discoveryApiRef);
   const fetchApi = useApi(fetchApiRef);
   const client = useMemo(
-    () => new SecureTokenStorageClient(fetchApi),
-    [fetchApi],
+    () => new SecureTokenStorageClient({ discoveryApi, fetchApi }),
+    [discoveryApi, fetchApi],
   );
-  const [consentRequest] = useState(readConsentRequest);
+  const [consentRequest, setConsentRequest] = useState<
+    ConsentRequest | undefined
+  >(readConsentRequest);
   const [grants, setGrants] = useState<ProviderTokenGrant[]>([]);
   const [loading, setLoading] = useState(true);
   const [pendingAction, setPendingAction] = useState<string>();
@@ -67,6 +74,7 @@ export function SecureTokenStoragePage() {
   }, [loadGrants]);
 
   const clearConsentRequest = () => {
+    setConsentRequest(undefined);
     window.history.replaceState({}, document.title, window.location.pathname);
   };
 

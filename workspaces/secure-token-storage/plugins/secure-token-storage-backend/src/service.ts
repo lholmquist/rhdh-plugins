@@ -123,7 +123,7 @@ function createCipherFromConfig(config: RootConfigService): TokenCipher {
 }
 
 function createOAuthProviders(config: RootConfigService): {
-  adapters: ReadonlyMap<string, ProviderOAuthAdapter>;
+  oauthAdapters: ReadonlyMap<string, ProviderOAuthAdapter>;
   refreshers: ReadonlyMap<string, ProviderTokenRefresher>;
 } {
   const adapters = new Map<string, ProviderOAuthAdapter>();
@@ -171,7 +171,7 @@ function createOAuthProviders(config: RootConfigService): {
     refreshers.set('microsoft', adapter);
   }
 
-  return { adapters, refreshers };
+  return { oauthAdapters: adapters, refreshers };
 }
 
 /** @internal */
