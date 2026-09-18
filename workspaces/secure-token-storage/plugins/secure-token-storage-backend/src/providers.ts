@@ -26,18 +26,21 @@ export interface MicrosoftOAuthAdapterOptions extends OAuthProviderOptions {
 }
 
 class OAuthProviderError extends Error {
+  /** Creates the safe, provider-independent error used for OAuth failures. */
   constructor() {
     super('OAuth provider request failed');
     this.name = 'OAuthProviderError';
   }
 }
 
+/** Ensures the OAuth request asks for offline access when supported. */
 function withOfflineAccess(scopes: string[]): string[] {
   return scopes.includes('offline_access')
     ? [...scopes]
     : [...scopes, 'offline_access'];
 }
 
+/** Reads a non-empty string field from an OAuth token response. */
 function getString(
   response: OAuthTokenResponse,
   key: string,
@@ -46,6 +49,7 @@ function getString(
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
+/** Reads a positive numeric field from an OAuth token response. */
 function getSeconds(
   response: OAuthTokenResponse,
   key: string,
@@ -55,6 +59,7 @@ function getSeconds(
   return Number.isFinite(seconds) && seconds > 0 ? seconds : undefined;
 }
 
+/** Converts an OAuth `expires_in` value into an absolute expiration time. */
 function expiresAt(
   response: OAuthTokenResponse,
   now: () => Date,
@@ -65,6 +70,7 @@ function expiresAt(
     : new Date(now().getTime() + seconds * 1000);
 }
 
+/** Parses provider scopes and falls back to the scopes requested by the caller. */
 function parseScopes(
   response: OAuthTokenResponse,
   fallback: string[],
@@ -87,6 +93,7 @@ function parseScopes(
   return scopes.length > 0 ? scopes : [...fallback];
 }
 
+/** Parses and validates an OAuth token endpoint response without exposing its contents. */
 async function readTokenResponse(
   response: Response,
 ): Promise<OAuthTokenResponse> {
@@ -107,12 +114,14 @@ async function readTokenResponse(
   return body as OAuthTokenResponse;
 }
 
+/** Extracts the required access token from a validated OAuth response. */
 function requireAccessToken(response: OAuthTokenResponse): string {
   const accessToken = getString(response, 'access_token');
   if (!accessToken) throw new OAuthProviderError();
   return accessToken;
 }
 
+/** Builds the form-encoded POST request used by OAuth token endpoints. */
 function formRequest(body: Record<string, string>): RequestInit {
   return {
     method: 'POST',
@@ -132,6 +141,7 @@ export class GitHubOAuthAdapter
   private readonly authorizationUrl: string;
   private readonly tokenUrl: string;
 
+  /** Creates a GitHub adapter with configurable OAuth endpoints and test dependencies. */
   constructor(private readonly options: GitHubOAuthAdapterOptions) {
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.now = options.now ?? (() => new Date());
@@ -141,6 +151,7 @@ export class GitHubOAuthAdapter
       options.tokenUrl ?? 'https://github.com/login/oauth/access_token';
   }
 
+  /** Creates the GitHub authorization URL for a PKCE-based provider connection. */
   createAuthorizationUrl(input: {
     state: string;
     codeChallenge: string;
@@ -157,6 +168,7 @@ export class GitHubOAuthAdapter
     return url.toString();
   }
 
+  /** Exchanges a GitHub authorization code for access and optional refresh tokens. */
   async exchangeAuthorizationCode(input: {
     code: string;
     codeVerifier: string;
@@ -187,6 +199,7 @@ export class GitHubOAuthAdapter
     };
   }
 
+  /** Refreshes a GitHub access token without returning provider credentials to callers. */
   async refresh(input: {
     provider: string;
     refreshToken: string;
@@ -224,6 +237,7 @@ export class MicrosoftOAuthAdapter
   private readonly authorizationUrl: string;
   private readonly tokenUrl: string;
 
+  /** Creates a Microsoft adapter for the configured tenant and OAuth endpoints. */
   constructor(private readonly options: MicrosoftOAuthAdapterOptions) {
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.now = options.now ?? (() => new Date());
@@ -239,6 +253,7 @@ export class MicrosoftOAuthAdapter
       )}/oauth2/v2.0/token`;
   }
 
+  /** Creates the Microsoft authorization URL for a PKCE-based provider connection. */
   createAuthorizationUrl(input: {
     state: string;
     codeChallenge: string;
@@ -257,6 +272,7 @@ export class MicrosoftOAuthAdapter
     return url.toString();
   }
 
+  /** Exchanges a Microsoft authorization code for scoped access and refresh tokens. */
   async exchangeAuthorizationCode(input: {
     code: string;
     codeVerifier: string;
@@ -291,6 +307,7 @@ export class MicrosoftOAuthAdapter
     };
   }
 
+  /** Refreshes a Microsoft access token and supports refresh-token rotation. */
   async refresh(input: {
     provider: string;
     refreshToken: string;
