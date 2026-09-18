@@ -20,6 +20,12 @@ export interface ProviderConnectionGrant {
   expiresAt: string;
 }
 
+export interface ProviderConnectionStart {
+  sessionId: string;
+  authorizationUrl: string;
+  expiresAt: string;
+}
+
 export class SecureTokenStorageClient {
   constructor(
     private readonly options: {
@@ -46,6 +52,13 @@ export class SecureTokenStorageClient {
           ...(expiresAt ? { expiresAt } : {}),
         }),
       },
+    );
+  }
+
+  async startConnection(provider: string): Promise<ProviderConnectionStart> {
+    return this.request<ProviderConnectionStart>(
+      `/connections/${encodeURIComponent(provider)}/start-user`,
+      { method: 'POST' },
     );
   }
 

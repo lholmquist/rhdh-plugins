@@ -4,7 +4,7 @@
  * Licensed under the Apache License, Version 2.0 (the "License");
  */
 import knex, { type Knex } from 'knex';
-import { TokenStorageRepository } from './repository';
+import { TokenStorageRepository, type StoredConnection } from './repository';
 
 describe('TokenStorageRepository', () => {
   let database: Knex;
@@ -15,6 +15,29 @@ describe('TokenStorageRepository', () => {
       connection: ':memory:',
       useNullAsDefault: true,
     });
+    await database.schema.createTable(
+      'secure_token_storage_connections',
+      table => {
+        table.string('id').primary();
+        table.string('user_entity_ref').notNullable();
+        table.string('provider').notNullable();
+        table.text('access_token_ciphertext').notNullable();
+        table.text('access_token_iv').notNullable();
+        table.text('access_token_auth_tag').notNullable();
+        table.string('access_token_key_version').notNullable();
+        table.text('refresh_token_ciphertext');
+        table.text('refresh_token_iv');
+        table.text('refresh_token_auth_tag');
+        table.string('refresh_token_key_version');
+        table.timestamp('access_token_expires_at');
+        table.text('scopes_json').notNullable();
+        table.timestamp('created_at').notNullable();
+        table.timestamp('updated_at').notNullable();
+        table.timestamp('last_used_at');
+        table.timestamp('revoked_at');
+        table.unique(['user_entity_ref', 'provider']);
+      },
+    );
     await database.schema.createTable(
       'secure_token_storage_connect_sessions',
       table => {
@@ -76,5 +99,43 @@ describe('TokenStorageRepository', () => {
       consentDecidedAt: undefined,
       grantId: undefined,
     });
+  });
+
+  it('clears a prior connection revocation when the connection is reused', async () => {
+    const repository = new TokenStorageRepository(database as never);
+    const encryptedSecret = {
+      ciphertext: 'ciphertext',
+      iv: 'iv',
+      authTag: 'auth-tag',
+      keyVersion: 'v1',
+    };
+    await database('secure_token_storage_connections').insert({
+      id: 'connection-1',
+      user_entity_ref: 'user:default/luke',
+      provider: 'github',
+      access_token_ciphertext: encryptedSecret.ciphertext,
+      access_token_iv: encryptedSecret.iv,
+      access_token_auth_tag: encryptedSecret.authTag,
+      access_token_key_version: encryptedSecret.keyVersion,
+      scopes_json: JSON.stringify(['read:user']),
+      created_at: new Date('2026-09-07T12:00:00Z'),
+      updated_at: new Date('2026-09-07T12:00:00Z'),
+      revoked_at: new Date('2026-09-07T12:05:00Z'),
+    });
+
+    await repository.upsertConnection({
+      id: 'connection-1',
+      userEntityRef: 'user:default/luke',
+      provider: 'github',
+      accessToken: encryptedSecret,
+      accessTokenExpiresAt: new Date('2026-09-07T13:00:00Z'),
+      scopes: ['read:user'],
+      createdAt: new Date('2026-09-07T12:00:00Z'),
+      updatedAt: new Date('2026-09-07T12:10:00Z'),
+    } satisfies StoredConnection);
+
+    await expect(
+      repository.findConnection('user:default/luke', 'github'),
+    ).resolves.toMatchObject({ revokedAt: undefined });
   });
 });

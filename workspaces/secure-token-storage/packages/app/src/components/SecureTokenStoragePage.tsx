@@ -57,11 +57,27 @@ export function SecureTokenStoragePage() {
   const [message, setMessage] = useState<string>();
   const [error, setError] = useState<string>();
 
+  const connect = async (provider: string) => {
+    setPendingAction(`connect:${provider}`);
+    setError(undefined);
+    try {
+      const connection = await client.startConnection(provider);
+      // The backend creates the PKCE session and returns a one-time provider
+      // URL. Navigation starts the normal provider login and consent flow
+      // without requiring the user to copy a URL from a service response.
+      window.location.assign(connection.authorizationUrl);
+    } catch {
+      setError(`Unable to start the ${provider} connection.`);
+      setPendingAction(undefined);
+    }
+  };
+
   const loadGrants = useCallback(async () => {
     setLoading(true);
     setError(undefined);
     try {
-      setGrants(await client.listGrants());
+      const loadedGrants = await client.listGrants();
+      setGrants(loadedGrants.filter(grant => !grant.revokedAt));
     } catch {
       setError('Unable to load provider grants.');
     } finally {
@@ -139,6 +155,10 @@ export function SecureTokenStoragePage() {
     }
   };
 
+  const hasActiveGitHubGrant = grants.some(
+    grant => grant.provider === 'github' && !grant.revokedAt,
+  );
+
   return (
     <Box sx={{ maxWidth: 960, p: 4 }}>
       <Typography component="h1" variant="h4" gutterBottom>
@@ -154,6 +174,29 @@ export function SecureTokenStoragePage() {
         <Alert severity="error" sx={{ mt: 2 }}>
           {error}
         </Alert>
+      )}
+
+      {!loading && !hasActiveGitHubGrant && !consentRequest && (
+        <Paper sx={{ mt: 3, p: 3 }}>
+          <Typography variant="h6" gutterBottom>
+            Connect a provider
+          </Typography>
+          <Typography color="text.secondary" paragraph>
+            Start the GitHub authorization flow without copying an authorization
+            URL from a service response.
+          </Typography>
+          <Stack direction="row" spacing={2} sx={{ mt: 3 }}>
+            <Button
+              variant="contained"
+              onClick={() => void connect('github')}
+              disabled={Boolean(pendingAction)}
+            >
+              {pendingAction === 'connect:github'
+                ? 'Opening GitHub…'
+                : 'Connect GitHub'}
+            </Button>
+          </Stack>
+        </Paper>
       )}
 
       {consentRequest && (
@@ -196,8 +239,9 @@ export function SecureTokenStoragePage() {
           Active grants
         </Typography>
         <Typography color="text.secondary" paragraph>
-          Connections are initiated by a trusted service. After the OAuth
-          callback completes, Backstage redirects here for user consent.
+          Connections can be initiated by a trusted service or from the action
+          above. After the OAuth callback completes, Backstage redirects here
+          for user consent.
         </Typography>
         {loading && <CircularProgress size={24} />}
         {!loading && grants.length === 0 && (

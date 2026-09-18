@@ -15,6 +15,15 @@ export interface Config {
       allowedRedirectUris: string[];
       /** Optional frontend URL that receives completed consent sessions. */
       consentUrl?: string;
+      /** Optional browser-initiated connection defaults for the sample UI. */
+      userConnection?: {
+        /** Service subject that receives the eventual user-approved grant. */
+        callerSubject: string;
+        /** Registered callback URL used by the provider OAuth application. */
+        redirectUri: string;
+        /** Fixed scopes requested by the browser connect action. */
+        scopes: string[];
+      };
       /** Lifetime of a pending OAuth state in seconds. */
       connectSessionTtlSeconds?: number;
       /** Default lifetime of an approved grant in seconds. */
