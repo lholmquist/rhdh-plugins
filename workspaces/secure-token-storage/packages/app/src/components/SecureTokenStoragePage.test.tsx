@@ -138,6 +138,8 @@ describe('SecureTokenStoragePage', () => {
       await Promise.resolve();
     });
 
+    expect(container.textContent).toContain('Grant ID: grant-1');
+
     const revokeButton = Array.from(container.querySelectorAll('button')).find(
       button => button.textContent?.trim() === 'Revoke',
     );
