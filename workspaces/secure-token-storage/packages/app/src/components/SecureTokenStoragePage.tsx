@@ -265,7 +265,9 @@ export function SecureTokenStoragePage() {
                 >
                   <ListItemText
                     primary={grant.provider}
-                    secondary={`Scopes: ${grant.scopes.join(
+                    secondary={`Grant ID: ${
+                      grant.grantId
+                    } · Scopes: ${grant.scopes.join(
                       ', ',
                     )} · Expires: ${new Date(
                       grant.expiresAt,
