@@ -3,11 +3,7 @@
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  */
-import {
-  discoveryApiRef,
-  fetchApiRef,
-  useApi,
-} from '@backstage/core-plugin-api';
+import { discoveryApiRef, useApi } from '@backstage/core-plugin-api';
 import type { DiscoveryApi, FetchApi } from '@backstage/core-plugin-api';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -99,7 +95,61 @@ describe('SecureTokenStoragePage', () => {
     });
 
     expect(container.textContent).not.toContain('Approve github access');
+    expect(container.textContent).not.toContain('Connect GitHub');
     expect(container.textContent).toContain('Connected github');
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
+  it('does not show a revoked grant in the active grants list', async () => {
+    window.history.replaceState({}, '', '/secure-token-storage');
+    fetch.mockReset();
+    fetch
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              grantId: 'grant-1',
+              provider: 'github',
+              scopes: ['repo'],
+              expiresAt: '2026-09-08T12:00:00.000Z',
+            },
+          ]),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              grantId: 'grant-1',
+              provider: 'github',
+              scopes: ['repo'],
+              expiresAt: '2026-09-08T12:00:00.000Z',
+              revokedAt: '2026-09-08T12:01:00.000Z',
+            },
+          ]),
+          { status: 200 },
+        ),
+      );
+
+    await act(async () => {
+      root.render(<SecureTokenStoragePage />);
+      await Promise.resolve();
+    });
+
+    const revokeButton = Array.from(container.querySelectorAll('button')).find(
+      button => button.textContent?.trim() === 'Revoke',
+    );
+    expect(revokeButton).toBeDefined();
+
+    await act(async () => {
+      revokeButton!.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).not.toContain('Scopes: repo');
     expect(fetch).toHaveBeenCalledTimes(3);
   });
 });

@@ -140,7 +140,17 @@ database will be reset.
 
 ## 5. Connect GitHub
 
-Start the provider connection using the local SonataFlow service credential:
+The sample UI includes a **Connect GitHub** button. It calls the backend using
+the signed-in Backstage user session, receives the one-time authorization URL,
+and navigates to GitHub automatically. The SonataFlow service credential is
+not exposed to the browser.
+
+Open <http://localhost:3000/secure-token-storage> and select **Connect GitHub**.
+Authenticate with GitHub and authorize the requested access. The GitHub
+callback redirects to the provider-connections page.
+
+The trusted-service request remains available for workflow integrations and can
+also be used to reproduce the flow from a terminal:
 
 ```bash
 CONNECTION_RESPONSE="$(

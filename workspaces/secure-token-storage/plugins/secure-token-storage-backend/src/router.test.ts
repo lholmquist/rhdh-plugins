@@ -91,6 +91,44 @@ describe('secure token storage router', () => {
     expect(service.startProviderConnection).not.toHaveBeenCalled();
   });
 
+  it('starts a configured browser connection for the authenticated user', async () => {
+    const httpAuth = {
+      credentials: jest.fn().mockResolvedValue(userCredentials()),
+    } as unknown as jest.Mocked<HttpAuthService>;
+    const service = {
+      startProviderConnection: jest.fn().mockResolvedValue({
+        sessionId: 'session-1',
+        authorizationUrl: 'https://github.example/authorize',
+        expiresAt: new Date('2026-09-07T12:10:00Z'),
+      }),
+    } as unknown as jest.Mocked<SecureTokenStorageService>;
+    const app = express();
+    app.use(
+      '/api/secure-token-storage',
+      await createRouter({
+        httpAuth,
+        service,
+        userConnection: {
+          callerSubject: 'sonataflow',
+          redirectUri: 'http://localhost/callback',
+          scopes: ['read:user'],
+        },
+      }),
+    );
+
+    await request(app)
+      .post('/api/secure-token-storage/connections/github/start-user')
+      .expect(201);
+
+    expect(service.startProviderConnection).toHaveBeenCalledWith({
+      userEntityRef: 'user:default/luke',
+      provider: 'github',
+      scopes: ['read:user'],
+      redirectUri: 'http://localhost/callback',
+      callerSubject: 'sonataflow',
+    });
+  });
+
   it('accepts the OAuth callback without trusting browser credentials', async () => {
     const httpAuth = {
       credentials: jest.fn(),

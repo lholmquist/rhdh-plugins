@@ -33,6 +33,19 @@ export const secureTokenStoragePlugin = createBackendPlugin({
             consentUrl: config.getOptionalString(
               'secureTokenStorage.oauth.consentUrl',
             ),
+            userConnection: (() => {
+              const userConnection = config.getOptionalConfig(
+                'secureTokenStorage.oauth.userConnection',
+              );
+              const callerSubject =
+                userConnection?.getOptionalString('callerSubject');
+              const redirectUri =
+                userConnection?.getOptionalString('redirectUri');
+              const scopes = userConnection?.getOptionalStringArray('scopes');
+              return callerSubject && redirectUri && scopes?.length
+                ? { callerSubject, redirectUri, scopes }
+                : undefined;
+            })(),
           }),
         );
         httpRouter.addAuthPolicy({

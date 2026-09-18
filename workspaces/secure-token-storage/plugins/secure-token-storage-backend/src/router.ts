@@ -72,6 +72,11 @@ export async function createRouter(options: {
   httpAuth: HttpAuthService;
   service: SecureTokenStorageService;
   consentUrl?: string;
+  userConnection?: {
+    callerSubject: string;
+    redirectUri: string;
+    scopes: string[];
+  };
 }) {
   const router = Router();
   router.use(express.json());
@@ -119,6 +124,33 @@ export async function createRouter(options: {
       sendSafeError(response, error);
     }
   });
+
+  router.post(
+    '/connections/:provider/start-user',
+    async (request, response) => {
+      try {
+        const credentials = await options.httpAuth.credentials(request, {
+          allow: ['user'],
+        });
+        if (!options.userConnection) {
+          response.status(404).json({ error: 'user-connect-not-configured' });
+          return;
+        }
+
+        response.status(201).json(
+          await options.service.startProviderConnection({
+            userEntityRef: credentials.principal.userEntityRef,
+            provider: request.params.provider,
+            scopes: options.userConnection.scopes,
+            redirectUri: options.userConnection.redirectUri,
+            callerSubject: options.userConnection.callerSubject,
+          }),
+        );
+      } catch (error) {
+        sendSafeError(response, error);
+      }
+    },
+  );
 
   router.get('/connections/:provider/callback', async (request, response) => {
     const state = queryString(request.query.state);

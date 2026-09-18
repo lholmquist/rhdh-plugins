@@ -221,7 +221,9 @@ export class TokenStorageRepository {
       created_at: connection.createdAt,
       updated_at: connection.updatedAt,
       last_used_at: connection.lastUsedAt,
-      revoked_at: connection.revokedAt,
+      // Knex omits undefined values from UPDATE statements. Explicitly write
+      // NULL so a reconnected provider clears its prior revocation state.
+      revoked_at: connection.revokedAt ?? null,
     };
 
     await this.database.transaction(async transaction => {
