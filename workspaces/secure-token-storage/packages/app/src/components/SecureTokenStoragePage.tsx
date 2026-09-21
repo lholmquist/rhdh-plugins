@@ -141,6 +141,20 @@ export function SecureTokenStoragePage() {
     }
   };
 
+  const refresh = async (grant: ProviderTokenGrant) => {
+    setPendingAction(`refresh:${grant.grantId}`);
+    setError(undefined);
+    try {
+      await client.refreshGrant(grant.grantId);
+      setMessage(`Refreshed the ${grant.provider} grant.`);
+      await loadGrants();
+    } catch {
+      setError('Unable to refresh this grant.');
+    } finally {
+      setPendingAction(undefined);
+    }
+  };
+
   const disconnect = async (provider: string) => {
     setPendingAction(`disconnect:${provider}`);
     setError(undefined);
@@ -254,13 +268,27 @@ export function SecureTokenStoragePage() {
                 <ListItem
                   disableGutters
                   secondaryAction={
-                    <Button
-                      color="error"
-                      onClick={() => void revoke(grant)}
-                      disabled={Boolean(pendingAction)}
-                    >
-                      Revoke
-                    </Button>
+                    <Stack direction="row" spacing={1}>
+                      {new Date(grant.expiresAt).getTime() <= Date.now() && (
+                        <Button
+                          onClick={() => void refresh(grant)}
+                          disabled={Boolean(pendingAction)}
+                        >
+                          {pendingAction === `refresh:${grant.grantId}`
+                            ? 'Refreshing…'
+                            : 'Refresh'}
+                        </Button>
+                      )}
+                      <Button
+                        color="error"
+                        onClick={() => void revoke(grant)}
+                        disabled={Boolean(pendingAction)}
+                      >
+                        {pendingAction === grant.grantId
+                          ? 'Revoking…'
+                          : 'Revoke'}
+                      </Button>
+                    </Stack>
                   }
                 >
                   <ListItemText

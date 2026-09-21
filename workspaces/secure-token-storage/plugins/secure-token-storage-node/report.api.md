@@ -110,6 +110,10 @@ export interface SecureTokenStorageService {
     userEntityRef: string;
     provider?: string;
   }): Promise<TokenGrant[]>;
+  refreshGrant(options: {
+    grantId: string;
+    userEntityRef: string;
+  }): Promise<TokenGrant>;
   rejectProviderConnection(input: {
     sessionId: string;
     userEntityRef: string;

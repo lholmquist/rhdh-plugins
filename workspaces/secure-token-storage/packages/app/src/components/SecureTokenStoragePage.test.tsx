@@ -154,4 +154,73 @@ describe('SecureTokenStoragePage', () => {
     expect(container.textContent).not.toContain('Scopes: repo');
     expect(fetch).toHaveBeenCalledTimes(3);
   });
+
+  it('shows refresh for an expired grant and reloads it after refreshing', async () => {
+    window.history.replaceState({}, '', '/secure-token-storage');
+    fetch.mockReset();
+    fetch
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              grantId: 'grant-1',
+              provider: 'github',
+              scopes: ['repo'],
+              expiresAt: '2026-09-08T12:00:00.000Z',
+            },
+          ]),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            grantId: 'grant-1',
+            provider: 'github',
+            scopes: ['repo'],
+            expiresAt: '2026-10-08T12:00:00.000Z',
+          }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              grantId: 'grant-1',
+              provider: 'github',
+              scopes: ['repo'],
+              expiresAt: '2026-10-08T12:00:00.000Z',
+            },
+          ]),
+          { status: 200 },
+        ),
+      );
+
+    await act(async () => {
+      root.render(<SecureTokenStoragePage />);
+      await Promise.resolve();
+    });
+
+    const refreshButton = Array.from(container.querySelectorAll('button')).find(
+      button => button.textContent?.trim() === 'Refresh',
+    );
+    expect(refreshButton).toBeDefined();
+
+    await act(async () => {
+      refreshButton!.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain('Refreshed the github grant.');
+    expect(container.textContent).toContain('Expires:');
+    expect(fetch).toHaveBeenNthCalledWith(
+      2,
+      `${await discoveryApi.getBaseUrl(
+        'secure-token-storage',
+      )}/grants/grant-1/refresh`,
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
 });

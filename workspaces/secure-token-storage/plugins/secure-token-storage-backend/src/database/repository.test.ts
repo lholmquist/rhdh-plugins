@@ -61,6 +61,17 @@ describe('TokenStorageRepository', () => {
         table.string('grant_id');
       },
     );
+    await database.schema.createTable('secure_token_storage_grants', table => {
+      table.string('id').primary();
+      table.string('user_entity_ref').notNullable();
+      table.string('caller_subject').notNullable();
+      table.string('provider').notNullable();
+      table.text('scopes_json').notNullable();
+      table.string('workflow_instance_id');
+      table.timestamp('created_at').notNullable();
+      table.timestamp('expires_at').notNullable();
+      table.timestamp('revoked_at');
+    });
   });
 
   afterEach(async () => {
@@ -99,6 +110,37 @@ describe('TokenStorageRepository', () => {
       consentDecidedAt: undefined,
       grantId: undefined,
     });
+  });
+
+  it('updates the expiry of an active grant owned by the user', async () => {
+    const repository = new TokenStorageRepository(database as never);
+    await database('secure_token_storage_grants').insert({
+      id: 'grant-1',
+      user_entity_ref: 'user:default/luke',
+      caller_subject: 'sonataflow',
+      provider: 'github',
+      scopes_json: JSON.stringify(['repo']),
+      created_at: new Date('2026-09-07T10:00:00Z'),
+      expires_at: new Date('2026-09-07T11:00:00Z'),
+    });
+
+    await expect(
+      repository.updateGrantExpiry(
+        'grant-1',
+        'user:default/luke',
+        new Date('2026-09-07T13:00:00Z'),
+      ),
+    ).resolves.toBe(true);
+    await expect(repository.findGrant('grant-1')).resolves.toMatchObject({
+      expiresAt: new Date('2026-09-07T13:00:00Z'),
+    });
+    await expect(
+      repository.updateGrantExpiry(
+        'grant-1',
+        'user:default/other',
+        new Date('2026-09-07T14:00:00Z'),
+      ),
+    ).resolves.toBe(false);
   });
 
   it('clears a prior connection revocation when the connection is reused', async () => {

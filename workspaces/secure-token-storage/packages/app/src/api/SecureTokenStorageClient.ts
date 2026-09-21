@@ -78,6 +78,13 @@ export class SecureTokenStorageClient {
     });
   }
 
+  async refreshGrant(grantId: string): Promise<ProviderTokenGrant> {
+    return this.request<ProviderTokenGrant>(
+      `/grants/${encodeURIComponent(grantId)}/refresh`,
+      { method: 'POST' },
+    );
+  }
+
   async disconnectProvider(provider: string): Promise<void> {
     await this.request<void>(
       `/connections/${encodeURIComponent(provider)}/disconnect`,

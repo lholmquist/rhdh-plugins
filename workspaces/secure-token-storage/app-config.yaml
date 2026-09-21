@@ -93,6 +93,11 @@ secureTokenStorage:
     - sonataflow
   oauth:
     consentUrl: http://localhost:3000/secure-token-storage
+    userConnection:
+      callerSubject: sonataflow
+      redirectUri: http://localhost:7007/api/secure-token-storage/connections/github/callback
+      scopes:
+        - read:user
     providers:
       github:
         clientId: ${GITHUB_CLIENT_ID}

@@ -20,6 +20,7 @@ import orchestratorPlugin, {
 } from '@red-hat-developer-hub/backstage-plugin-orchestrator';
 import orchestratorFormWidgetsPlugin from '@red-hat-developer-hub/backstage-plugin-orchestrator-form-widgets';
 import { rhdhThemeModule } from '@red-hat-developer-hub/backstage-plugin-theme/alpha';
+import { navModule } from './modules/nav';
 import { secureTokenStoragePlugin } from './secureTokenStoragePlugin';
 
 const signInPageExtension = SignInPageBlueprint.make({
@@ -51,6 +52,7 @@ const signInModule = createFrontendModule({
 export default createApp({
   features: [
     rhdhThemeModule,
+    navModule,
     catalogPlugin,
     userSettingsPlugin,
     orchestratorPlugin,

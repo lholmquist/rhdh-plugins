@@ -275,6 +275,11 @@ export interface SecureTokenStorageService {
     grantId: string;
     userEntityRef: string;
   }): Promise<void>;
+  /** Renews a user-owned grant while preserving its opaque grant ID. */
+  refreshGrant(options: {
+    grantId: string;
+    userEntityRef: string;
+  }): Promise<TokenGrant>;
 }
 
 /**

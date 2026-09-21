@@ -287,4 +287,41 @@ describe('secure token storage router', () => {
       provider: 'github',
     });
   });
+
+  it('refreshes a grant for the authenticated user', async () => {
+    const httpAuth = {
+      credentials: jest.fn().mockResolvedValue(userCredentials()),
+    } as unknown as jest.Mocked<HttpAuthService>;
+    const service = {
+      refreshGrant: jest.fn().mockResolvedValue({
+        grantId: 'grant-1',
+        callerSubject: 'sonataflow',
+        provider: 'github',
+        scopes: ['repo'],
+        createdAt: new Date('2026-09-07T12:00:00Z'),
+        expiresAt: new Date('2026-10-07T12:00:00Z'),
+      }),
+    } as unknown as jest.Mocked<SecureTokenStorageService>;
+    const app = express();
+    app.use(
+      '/api/secure-token-storage',
+      await createRouter({ httpAuth, service }),
+    );
+
+    await request(app)
+      .post('/api/secure-token-storage/grants/grant-1/refresh')
+      .expect(200, {
+        grantId: 'grant-1',
+        callerSubject: 'sonataflow',
+        provider: 'github',
+        scopes: ['repo'],
+        createdAt: '2026-09-07T12:00:00.000Z',
+        expiresAt: '2026-10-07T12:00:00.000Z',
+      });
+
+    expect(service.refreshGrant).toHaveBeenCalledWith({
+      grantId: 'grant-1',
+      userEntityRef: 'user:default/luke',
+    });
+  });
 });

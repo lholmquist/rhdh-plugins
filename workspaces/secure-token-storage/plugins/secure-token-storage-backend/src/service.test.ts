@@ -31,6 +31,7 @@ function createRepository() {
     listGrants: jest.fn(),
     markConnectionUsed: jest.fn(),
     updateConnectionTokens: jest.fn(),
+    updateGrantExpiry: jest.fn(),
     revokeGrant: jest.fn(),
     disconnectProvider: jest.fn(),
     recordAuditEvent: jest.fn(),
@@ -443,6 +444,55 @@ describe('DefaultSecureTokenStorageService', () => {
         eventType: 'provider-disconnected',
         connectionId: 'connection-1',
         metadata: { revokedGrantCount: 1 },
+      }),
+    );
+  });
+
+  it('refreshes an expired user grant without changing its grant ID', async () => {
+    const repository = createRepository();
+    repository.findGrant.mockResolvedValue({
+      id: 'grant-1',
+      userEntityRef: 'user:default/luke',
+      callerSubject: 'sonataflow',
+      provider: 'github',
+      scopes: ['repo'],
+      createdAt: new Date('2026-09-07T10:00:00Z'),
+      expiresAt: new Date('2026-09-07T11:00:00Z'),
+    });
+    repository.findConnection.mockResolvedValue({
+      revokedAt: undefined,
+    } as never);
+    repository.updateGrantExpiry.mockResolvedValue(true);
+    const service = new DefaultSecureTokenStorageService(true, {
+      repository,
+      cipher: createTokenCipher({ activeKey: key, activeKeyVersion: 'v1' }),
+      now: () => new Date('2026-09-07T12:00:00Z'),
+      defaultGrantTtlMs: 60 * 60 * 1000,
+    });
+
+    await expect(
+      service.refreshGrant({
+        grantId: 'grant-1',
+        userEntityRef: 'user:default/luke',
+      }),
+    ).resolves.toEqual({
+      grantId: 'grant-1',
+      callerSubject: 'sonataflow',
+      provider: 'github',
+      scopes: ['repo'],
+      createdAt: new Date('2026-09-07T10:00:00Z'),
+      expiresAt: new Date('2026-09-07T13:00:00Z'),
+    });
+    expect(repository.updateGrantExpiry).toHaveBeenCalledWith(
+      'grant-1',
+      'user:default/luke',
+      new Date('2026-09-07T13:00:00Z'),
+    );
+    expect(repository.recordAuditEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: 'grant-refreshed',
+        grantId: 'grant-1',
+        metadata: { reason: 'user-refreshed' },
       }),
     );
   });

@@ -278,6 +278,22 @@ export async function createRouter(options: {
     }
   });
 
+  router.post('/grants/:grantId/refresh', async (request, response) => {
+    try {
+      const credentials = await options.httpAuth.credentials(request, {
+        allow: ['user'],
+      });
+      response.json(
+        await options.service.refreshGrant({
+          grantId: request.params.grantId,
+          userEntityRef: credentials.principal.userEntityRef,
+        }),
+      );
+    } catch (error) {
+      sendSafeError(response, error);
+    }
+  });
+
   router.post('/token', async (request, response) => {
     try {
       const credentials = await options.httpAuth.credentials(request, {
