@@ -300,6 +300,7 @@ export class V2 {
           authTokens: executeWorkflowRequestDTO.authTokens as Array<AuthToken>,
           providerTokenGrants: executeWorkflowRequestDTO.providerTokenGrants,
           backstageToken,
+          initiatorEntity,
         });
 
       // We need to return the workflow instance ID
@@ -363,6 +364,7 @@ export class V2 {
         providerTokenGrants: executeWorkflowRequestDTO.providerTokenGrants,
         serviceUrl: definition.serviceUrl,
         backstageToken,
+        initiatorEntity,
       });
     }
 

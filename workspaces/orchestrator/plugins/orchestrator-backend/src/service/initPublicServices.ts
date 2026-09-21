@@ -55,6 +55,7 @@ export function initPublicServices(
     dataIndexService,
     logger,
     orchestratorKafka,
+    options.providerTokenGrantResolver,
   );
 
   const workflowCacheService = new WorkflowCacheService(

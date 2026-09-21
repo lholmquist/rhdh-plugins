@@ -22,6 +22,7 @@ import {
   ProcessInstanceState,
   WorkflowInfo,
 } from '@red-hat-developer-hub/backstage-plugin-orchestrator-common';
+import type { ProviderTokenGrantResolver } from '@red-hat-developer-hub/backstage-plugin-orchestrator-node';
 
 import { OrchestratorKafkaServiceOptions } from '../types/kafka';
 import { DataIndexService } from './DataIndexService';
@@ -506,6 +507,7 @@ describe('SonataFlowService', () => {
         expect.objectContaining({
           headers: {
             'Content-Type': 'application/json',
+            'X-Provider-Token-Grant-Github': 'grant-1',
             'X-Provider-Token-Grants':
               '[{"grantId":"grant-1","provider":"github"}]',
           },
@@ -531,8 +533,47 @@ describe('SonataFlowService', () => {
         urlToFetch,
         expect.objectContaining({
           headers: expect.objectContaining({
+            'X-Provider-Token-Grant-Github': 'grant-1',
             'X-Provider-Token-Grants':
               '[{"grantId":"grant-1","provider":"github"}]',
+          }),
+        }),
+      );
+    });
+
+    it('resolves an active provider grant for the initiating user when input omits grantId', async () => {
+      const resolveProviderTokenGrant = jest.fn().mockResolvedValue({
+        grantId: 'grant-from-storage',
+        provider: 'github',
+      });
+      const resolver = {
+        getAccessToken: jest.fn(),
+        resolveProviderTokenGrant,
+      } as unknown as ProviderTokenGrantResolver;
+      const service = new SonataFlowService(
+        dataIndexServiceMock,
+        loggerMock,
+        undefined,
+        resolver,
+      );
+      setupTest({ ok: true, json: { id: definitionId } });
+
+      await service.executeWorkflow({
+        definitionId,
+        serviceUrl,
+        inputData: { workflowdata: { provider: 'github' } },
+        initiatorEntity: 'user:default/lholmquist',
+      });
+
+      expect(resolveProviderTokenGrant).toHaveBeenCalledWith({
+        userEntityRef: 'user:default/lholmquist',
+        provider: 'github',
+      });
+      expect(fetch).toHaveBeenCalledWith(
+        urlToFetch,
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'X-Provider-Token-Grant-Github': 'grant-from-storage',
           }),
         }),
       );
@@ -627,6 +668,7 @@ describe('SonataFlowService', () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'X-Provider-Token-Grant-Github': 'grant-1',
           'X-Provider-Token-Grants':
             '[{"grantId":"grant-1","provider":"github"}]',
         },

@@ -168,6 +168,7 @@ export class OrchestratorService {
     authTokens?: Array<AuthToken>;
     providerTokenGrants?: Array<ProviderTokenGrantReference>;
     backstageToken?: string;
+    initiatorEntity?: string;
   }) {
     return await this.sonataFlowService.executeWorkflowAsCloudEvent(args);
   }
@@ -179,6 +180,7 @@ export class OrchestratorService {
     authTokens?: Array<AuthToken>;
     providerTokenGrants?: Array<ProviderTokenGrantReference>;
     backstageToken?: string | undefined;
+    initiatorEntity?: string;
   }): Promise<WorkflowExecutionResponse | undefined> {
     return await this.sonataFlowService.executeWorkflow(args);
   }

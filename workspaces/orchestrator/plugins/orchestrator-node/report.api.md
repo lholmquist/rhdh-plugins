@@ -12,7 +12,6 @@ import { WorkflowLogsResponse } from '@red-hat-developer-hub/backstage-plugin-or
 
 // @public
 export interface ProviderTokenGrantExtensionPoint {
-  // (undocumented)
   setProviderTokenGrantResolver(resolver: ProviderTokenGrantResolver): void;
 }
 
@@ -23,7 +22,6 @@ export { ProviderTokenGrantReference };
 
 // @public
 export interface ProviderTokenGrantResolver {
-  // (undocumented)
   getAccessToken(options: {
     grantId: string;
     provider: string;
@@ -33,6 +31,10 @@ export interface ProviderTokenGrantResolver {
     expiresAt?: Date;
     scopes: string[];
   }>;
+  resolveProviderTokenGrant?(options: {
+    userEntityRef: string;
+    provider?: string;
+  }): Promise<ProviderTokenGrantReference | undefined>;
 }
 
 // @public (undocumented)
@@ -67,6 +69,4 @@ export interface WorkflowLogsExtensionPoint {
 // src/extensions.d.ts:7:1 - (ae-undocumented) Missing documentation for "WorkflowLogsExtensionPoint".
 // src/extensions.d.ts:8:5 - (ae-undocumented) Missing documentation for "addWorkflowLogProvider".
 // src/extensions.d.ts:13:22 - (ae-undocumented) Missing documentation for "workflowLogsExtensionEndpoint".
-// src/extensions.d.ts:23:5 - (ae-undocumented) Missing documentation for "getAccessToken".
-// src/extensions.d.ts:39:5 - (ae-undocumented) Missing documentation for "setProviderTokenGrantResolver".
 ```

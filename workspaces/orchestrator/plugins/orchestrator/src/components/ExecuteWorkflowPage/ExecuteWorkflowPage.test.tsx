@@ -32,6 +32,7 @@ const mockGetWorkflowOverview = jest.fn();
 const mockAuthenticate = jest.fn();
 let mockKafkaEnabled = true;
 let mockSearchParams = new URLSearchParams();
+let mockFormParameters: Record<string, unknown> = {};
 
 jest.mock('../../hooks/useTranslation', () => ({
   useTranslation: () => ({
@@ -133,7 +134,7 @@ jest.mock(
             'button',
             {
               type: 'button',
-              onClick: () => handleExecute({}),
+              onClick: () => handleExecute(mockFormParameters),
               disabled: isExecuting ?? false,
             },
             executeLabel,
@@ -143,7 +144,7 @@ jest.mock(
                 'button',
                 {
                   type: 'button',
-                  onClick: () => handleExecuteAsEvent({}),
+                  onClick: () => handleExecuteAsEvent(mockFormParameters),
                   disabled: isExecuting ?? false,
                 },
                 executeAsEventLabel,
@@ -176,6 +177,7 @@ describe('ExecuteWorkflowPage', () => {
     jest.clearAllMocks();
     mockKafkaEnabled = true;
     mockSearchParams = new URLSearchParams();
+    mockFormParameters = {};
     mockAuthenticate.mockResolvedValue([]);
     // Minimal schema so the page takes the OrchestratorForm path (primary UX),
     // not MissingSchemaNotice (already covered in MissingSchemaNotice.test.tsx).
@@ -264,6 +266,27 @@ describe('ExecuteWorkflowPage', () => {
       );
       expect(mockNavigate).toHaveBeenCalledWith(
         '/orchestrator/instances/inst-1',
+      );
+    });
+  });
+
+  it('forwards a provider grant reference while retaining workflow input', async () => {
+    mockFormParameters = {
+      grantId: 'grant-1',
+      provider: 'github',
+    };
+
+    renderPage();
+    await waitForPage();
+
+    fireEvent.click(screen.getByRole('button', { name: 'common.run' }));
+
+    await waitFor(() => {
+      expect(mockExecuteWorkflow).toHaveBeenCalledWith(
+        expect.objectContaining({
+          parameters: mockFormParameters,
+          providerTokenGrants: [{ grantId: 'grant-1', provider: 'github' }],
+        }),
       );
     });
   });
