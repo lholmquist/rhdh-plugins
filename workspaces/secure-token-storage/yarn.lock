@@ -6166,23 +6166,20 @@ __metadata:
   dependencies:
     "@backstage/backend-defaults": "npm:^0.17.8"
     "@backstage/backend-plugin-api": "npm:^1.10.0"
-    "@backstage/catalog-client": "npm:^1.16.1"
-    "@backstage/core-plugin-api": "npm:^1.12.9"
+    "@backstage/config": "npm:^1.3.8"
     "@backstage/errors": "npm:^1.3.1"
     "@backstage/integration": "npm:^2.1.1"
-    "@backstage/plugin-catalog-node": "npm:^2.2.4"
     "@backstage/plugin-permission-common": "npm:^0.9.10"
     "@backstage/plugin-permission-node": "npm:^0.11.3"
-    "@backstage/plugin-scaffolder-backend": "npm:^4.1.0"
-    "@backstage/plugin-scaffolder-node": "npm:^0.13.6"
+    "@backstage/types": "npm:^1.2.2"
     "@red-hat-developer-hub/backstage-plugin-orchestrator-common": "workspace:^"
     "@red-hat-developer-hub/backstage-plugin-orchestrator-node": "workspace:^"
+    "@types/express-serve-static-core": "npm:^4.17.5"
     "@urql/core": "npm:^6.0.1"
     ajv: "npm:^8.17.1"
     ajv-formats: "npm:^2.1.1"
     cloudevents: "npm:^10.0.0"
     express: "npm:^4.21.2"
-    express-promise-router: "npm:^4.1.1"
     fs-extra: "npm:^10.1.0"
     isomorphic-git: "npm:^1.23.0"
     js-yaml: "npm:^4.1.0"
@@ -6190,7 +6187,6 @@ __metadata:
     lodash: "npm:^4.18.1"
     luxon: "npm:^3.7.2"
     openapi-backend: "npm:^5.10.5"
-    yn: "npm:^5.0.0"
     zod: "npm:^4.3.6"
   peerDependencies:
     "@backstage-community/plugin-rbac-common": ^1.28.0
@@ -6201,40 +6197,40 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@red-hat-developer-hub/backstage-plugin-orchestrator-common@portal:../orchestrator/plugins/orchestrator-common::locator=%40internal%2Fsecure-token-storage%40workspace%3A."
   dependencies:
-    "@backstage/core-plugin-api": "npm:^1.12.9"
     "@backstage/plugin-permission-common": "npm:^0.9.10"
     "@backstage/types": "npm:^1.2.2"
     "@serverlessworkflow/sdk-typescript": "npm:^0.8.4"
     axios: "npm:^1.15.0"
     js-yaml: "npm:^4.1.0"
+    json-schema: "npm:^0.4.0"
   languageName: node
   linkType: soft
 
-"@red-hat-developer-hub/backstage-plugin-orchestrator-form-api@portal:../orchestrator/plugins/orchestrator-form-api::locator=%40internal%2Fsecure-token-storage%40workspace%3A.":
-  version: 0.0.0-use.local
-  resolution: "@red-hat-developer-hub/backstage-plugin-orchestrator-form-api@portal:../orchestrator/plugins/orchestrator-form-api::locator=%40internal%2Fsecure-token-storage%40workspace%3A."
+"@red-hat-developer-hub/backstage-plugin-orchestrator-form-api@npm:^2.11.0, @red-hat-developer-hub/backstage-plugin-orchestrator-form-api@npm:^2.11.1":
+  version: 2.11.1
+  resolution: "@red-hat-developer-hub/backstage-plugin-orchestrator-form-api@npm:2.11.1"
   dependencies:
     "@backstage/core-plugin-api": "npm:^1.12.9"
     "@backstage/types": "npm:^1.2.2"
-    "@red-hat-developer-hub/backstage-plugin-orchestrator-common": "workspace:^"
+    "@red-hat-developer-hub/backstage-plugin-orchestrator-common": "npm:^3.11.0"
     "@rjsf/core": "npm:^5.21.2"
     "@rjsf/utils": "npm:^5.21.2"
     json-schema: "npm:^0.4.0"
   peerDependencies:
     react: ^16.13.1 || ^17.0.0 || ^18.0.0
+  checksum: 10c0/dd182814025983422c9bc25dbf7fc909aad9ac45ade1450eea552529a53d073458167a929cc1c5e6bd1b5c5413c7bcaeafc7eaa70d2025215a8bcd5efd909e62
   languageName: node
-  linkType: soft
+  linkType: hard
 
-"@red-hat-developer-hub/backstage-plugin-orchestrator-form-react@portal:../orchestrator/plugins/orchestrator-form-react::locator=%40internal%2Fsecure-token-storage%40workspace%3A.":
-  version: 0.0.0-use.local
-  resolution: "@red-hat-developer-hub/backstage-plugin-orchestrator-form-react@portal:../orchestrator/plugins/orchestrator-form-react::locator=%40internal%2Fsecure-token-storage%40workspace%3A."
+"@red-hat-developer-hub/backstage-plugin-orchestrator-form-react@npm:^2.12.0":
+  version: 2.12.1
+  resolution: "@red-hat-developer-hub/backstage-plugin-orchestrator-form-react@npm:2.12.1"
   dependencies:
     "@backstage/core-components": "npm:^0.18.13"
-    "@backstage/core-plugin-api": "npm:^1.12.9"
     "@backstage/types": "npm:^1.2.2"
     "@mui/material": "npm:^5.17.1"
-    "@red-hat-developer-hub/backstage-plugin-orchestrator-common": "workspace:^"
-    "@red-hat-developer-hub/backstage-plugin-orchestrator-form-api": "workspace:^"
+    "@red-hat-developer-hub/backstage-plugin-orchestrator-common": "npm:^3.11.0"
+    "@red-hat-developer-hub/backstage-plugin-orchestrator-form-api": "npm:^2.11.1"
     "@rjsf/core": "npm:^5.21.2"
     "@rjsf/material-ui": "npm:^5.21.2"
     "@rjsf/utils": "npm:^5.21.2"
@@ -6245,12 +6241,13 @@ __metadata:
     tss-react: "npm:^4.9.18"
   peerDependencies:
     react: ^16.13.1 || ^17.0.0 || ^18.0.0
+  checksum: 10c0/4bb15788cc3889d46d6a54b0bc17f3911903a0426d1e9fbab7b12b66a3a618814b650aa3c93faa9c5a77af589fe129c76440fc7d38c62af1489aa0da6ad3e655
   languageName: node
-  linkType: soft
+  linkType: hard
 
-"@red-hat-developer-hub/backstage-plugin-orchestrator-form-widgets@portal:../orchestrator/plugins/orchestrator-form-widgets::locator=%40internal%2Fsecure-token-storage%40workspace%3A.":
-  version: 0.0.0-use.local
-  resolution: "@red-hat-developer-hub/backstage-plugin-orchestrator-form-widgets@portal:../orchestrator/plugins/orchestrator-form-widgets::locator=%40internal%2Fsecure-token-storage%40workspace%3A."
+"@red-hat-developer-hub/backstage-plugin-orchestrator-form-widgets@npm:2.1.0":
+  version: 2.1.0
+  resolution: "@red-hat-developer-hub/backstage-plugin-orchestrator-form-widgets@npm:2.1.0"
   dependencies:
     "@backstage/core-components": "npm:^0.18.13"
     "@backstage/core-plugin-api": "npm:^1.12.9"
@@ -6260,9 +6257,9 @@ __metadata:
     "@mui/icons-material": "npm:^5.17.1"
     "@mui/material": "npm:^5.17.1"
     "@mui/styles": "npm:5.18.0"
-    "@red-hat-developer-hub/backstage-plugin-orchestrator-common": "workspace:^"
-    "@red-hat-developer-hub/backstage-plugin-orchestrator-form-api": "workspace:^"
-    "@red-hat-developer-hub/backstage-plugin-orchestrator-form-react": "workspace:^"
+    "@red-hat-developer-hub/backstage-plugin-orchestrator-common": "npm:^3.10.0"
+    "@red-hat-developer-hub/backstage-plugin-orchestrator-form-api": "npm:^2.11.0"
+    "@red-hat-developer-hub/backstage-plugin-orchestrator-form-react": "npm:^2.12.0"
     "@rjsf/material-ui": "npm:^5.21.2"
     "@rjsf/utils": "npm:^5.21.2"
     clsx: "npm:^2.1.1"
@@ -6275,8 +6272,9 @@ __metadata:
     react: ^16.13.1 || ^17.0.0 || ^18.0.0
     react-dom: ^16.13.1 || ^17.0.0 || ^18.0.0
     react-router-dom: ^6.3.0
+  checksum: 10c0/b2386dabdcf2e5e49614b6cefde0bc93dceeb934d2325de6846c43d8aa21b3bb3d878f66bb39fd7ca023cdf88484a34f720d2f2b109f20c7fef4ec954a564fd1
   languageName: node
-  linkType: soft
+  linkType: hard
 
 "@red-hat-developer-hub/backstage-plugin-orchestrator-node@portal:../orchestrator/plugins/orchestrator-node::locator=%40internal%2Fsecure-token-storage%40workspace%3A.":
   version: 0.0.0-use.local
@@ -6334,7 +6332,6 @@ __metadata:
   resolution: "@red-hat-developer-hub/backstage-plugin-scaffolder-backend-module-orchestrator@portal:../orchestrator/plugins/scaffolder-backend-module-orchestrator::locator=%40internal%2Fsecure-token-storage%40workspace%3A."
   dependencies:
     "@backstage/backend-plugin-api": "npm:^1.10.0"
-    "@backstage/catalog-model": "npm:^1.10.0"
     "@backstage/plugin-permission-common": "npm:^0.9.10"
     "@backstage/plugin-scaffolder-node": "npm:^0.13.6"
     "@backstage/types": "npm:^1.2.2"
@@ -25636,13 +25633,6 @@ __metadata:
   version: 4.0.0
   resolution: "yn@npm:4.0.0"
   checksum: 10c0/2362e0f86dbea876d60365be56c3938922b096f6306a60f127b23439bd27af23aefb40d062148c47a398770f5a62535c93bb6b3c0281235d5019bb1796ab648e
-  languageName: node
-  linkType: hard
-
-"yn@npm:^5.0.0":
-  version: 5.1.0
-  resolution: "yn@npm:5.1.0"
-  checksum: 10c0/feac0bc3520dc3e6366d0b14c89713c55edcfdcbab6d39a098528279069cbb4caaa54938b90a36f52f72289b83d93d50fa8184693467f096aeb040b559ec8699
   languageName: node
   linkType: hard
 
