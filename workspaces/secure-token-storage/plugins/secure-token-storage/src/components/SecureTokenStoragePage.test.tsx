@@ -15,7 +15,7 @@ jest.mock('@backstage/core-plugin-api', () => ({
   useApi: jest.fn(),
 }));
 
-describe('SecureTokenStoragePage', () => {
+describe('SecureTokenStoragePage frontend plugin page', () => {
   const discoveryApi = {
     getBaseUrl: jest
       .fn()

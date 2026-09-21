@@ -29,7 +29,8 @@ The workspace currently provides:
   `/api/secure-token-storage/token`;
 - safe audit events for connection, consent, grant, token-use, refresh,
   denial, and disconnect activity;
-- a provider connections and consent page in the sample frontend; and
+- a publishable New Frontend System plugin with a provider connections and
+  consent page; and
 - an Orchestrator backend module that forwards explicit grants or resolves an
   active grant for the initiating user before invoking a workflow.
 

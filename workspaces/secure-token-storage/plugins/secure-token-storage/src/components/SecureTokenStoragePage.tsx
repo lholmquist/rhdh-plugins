@@ -41,6 +41,7 @@ function readConsentRequest(): ConsentRequest | undefined {
   };
 }
 
+/** Renders provider connection, consent, and grant management controls. */
 export function SecureTokenStoragePage() {
   const discoveryApi = useApi(discoveryApiRef);
   const fetchApi = useApi(fetchApiRef);

@@ -212,7 +212,7 @@ Workflow state, output, and logs: no provider token material
 - [Broker service](../workspaces/secure-token-storage/plugins/secure-token-storage-backend/src/service.ts)
 - [GitHub and Microsoft adapters](../workspaces/secure-token-storage/plugins/secure-token-storage-backend/src/providers.ts)
 - [Encrypted persistence](../workspaces/secure-token-storage/plugins/secure-token-storage-backend/src/database/repository.ts)
-- [Provider connections page](../workspaces/secure-token-storage/packages/app/src/components/SecureTokenStoragePage.tsx)
+- [Provider connections page](../workspaces/secure-token-storage/plugins/secure-token-storage/src/components/SecureTokenStoragePage.tsx)
 - [Orchestrator registration module](../workspaces/secure-token-storage/plugins/secure-token-storage-backend/src/orchestrator-module.ts)
 - [Orchestrator extension point](../workspaces/orchestrator/plugins/orchestrator-node/src/extensions.ts)
 - [Orchestrator public contract](../workspaces/orchestrator/plugins/orchestrator-common/src/openapi/openapi.yaml)

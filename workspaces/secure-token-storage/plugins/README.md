@@ -1,7 +1,9 @@
 # The Plugins Folder
 
-This is where your own plugins and their associated modules live, each in a
-separate folder of its own.
+This directory contains the secure token storage plugin packages:
 
-If you want to create a new plugin here, go to your project root directory, run
-the command `yarn new`, and follow the on-screen instructions.
+- `secure-token-storage` provides the New Frontend System provider connection,
+  consent, and grant-management page;
+- `secure-token-storage-backend` provides the backend routes and service
+  implementation; and
+- `secure-token-storage-node` provides the shared root-scoped service contract.

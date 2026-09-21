@@ -16,7 +16,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { secureTokenStoragePlugin } from './secureTokenStoragePlugin';
+import secureTokenStoragePlugin from './index';
 
 describe('secure-token-storage frontend plugin', () => {
   it('registers the secure-token-storage page extension', () => {
@@ -26,10 +26,7 @@ describe('secure-token-storage frontend plugin', () => {
   });
 
   it('declares an icon so the page is discoverable in app navigation', () => {
-    const source = readFileSync(
-      resolve(__dirname, 'secureTokenStoragePlugin.tsx'),
-      'utf8',
-    );
+    const source = readFileSync(resolve(__dirname, 'index.tsx'), 'utf8');
 
     expect(source).toMatch(
       /PageBlueprint\.make\(\{[\s\S]*?title:\s*'Provider connections'[\s\S]*?icon:\s*<VpnKeyIcon\s+fontSize="inherit"\s*\/>/,
