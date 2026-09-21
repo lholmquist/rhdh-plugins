@@ -56,6 +56,7 @@ export interface StoredConnectSession {
 
 export type AuditEventType =
   | 'grant-created'
+  | 'grant-refreshed'
   | 'grant-used'
   | 'grant-denied'
   | 'grant-revoked'
@@ -307,6 +308,18 @@ export class TokenStorageRepository {
       .where({ id })
       .first<GrantRow>();
     return row ? fromGrantRow(row) : undefined;
+  }
+
+  async updateGrantExpiry(
+    id: string,
+    userEntityRef: string,
+    expiresAt: Date,
+  ): Promise<boolean> {
+    const updated = await this.database('secure_token_storage_grants')
+      .where({ id, user_entity_ref: userEntityRef })
+      .whereNull('revoked_at')
+      .update({ expires_at: expiresAt });
+    return updated === 1;
   }
 
   async listGrants(

@@ -795,6 +795,70 @@ export class DefaultSecureTokenStorageService
     }
   }
 
+  async refreshGrant(options: {
+    grantId: string;
+    userEntityRef: string;
+  }): Promise<TokenGrant> {
+    this.assertReady();
+    const grant = await this.repository!.findGrant(options.grantId);
+    if (!grant || grant.userEntityRef !== options.userEntityRef) {
+      await this.recordAudit({
+        eventType: 'grant-denied',
+        userEntityRef: options.userEntityRef,
+        grantId: options.grantId,
+        metadata: { reason: 'grant-not-found' },
+      });
+      throw new SecureTokenStorageError('grant-not-found');
+    }
+    if (grant.revokedAt) {
+      await this.recordAudit({
+        eventType: 'grant-denied',
+        userEntityRef: options.userEntityRef,
+        provider: grant.provider,
+        grantId: grant.id,
+        callerSubject: grant.callerSubject,
+        metadata: { reason: 'grant-revoked' },
+      });
+      throw new SecureTokenStorageError('grant-revoked');
+    }
+
+    const connection = await this.repository!.findConnection(
+      grant.userEntityRef,
+      grant.provider,
+    );
+    if (!connection || connection.revokedAt) {
+      throw new SecureTokenStorageError('connection-not-found');
+    }
+
+    const now = this.now();
+    const expiresAt = new Date(
+      Math.max(
+        grant.expiresAt.getTime(),
+        now.getTime() + this.defaultGrantTtlMs,
+      ),
+    );
+    if (
+      !(await this.repository!.updateGrantExpiry(
+        grant.id,
+        grant.userEntityRef,
+        expiresAt,
+      ))
+    ) {
+      throw new SecureTokenStorageError('grant-revoked');
+    }
+
+    const refreshedGrant = { ...grant, expiresAt };
+    await this.recordAudit({
+      eventType: 'grant-refreshed',
+      userEntityRef: grant.userEntityRef,
+      provider: grant.provider,
+      grantId: grant.id,
+      callerSubject: grant.callerSubject,
+      metadata: { reason: 'user-refreshed' },
+    });
+    return toTokenGrant(refreshedGrant);
+  }
+
   private async denyGrantAccess(
     options: {
       grantId: string;

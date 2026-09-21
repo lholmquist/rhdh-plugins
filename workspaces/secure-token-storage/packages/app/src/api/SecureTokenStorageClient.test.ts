@@ -102,4 +102,33 @@ describe('SecureTokenStorageClient', () => {
       expect.objectContaining({ method: 'POST' }),
     );
   });
+
+  it('refreshes a selected grant', async () => {
+    const fetch = jest.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          grantId: 'grant-1',
+          provider: 'github',
+          scopes: ['repo'],
+          expiresAt: '2026-10-08T12:00:00.000Z',
+        }),
+        { status: 200 },
+      ),
+    );
+    const client = new SecureTokenStorageClient({
+      discoveryApi,
+      fetchApi: { fetch } as FetchApi,
+    });
+
+    await expect(client.refreshGrant('grant-1')).resolves.toEqual({
+      grantId: 'grant-1',
+      provider: 'github',
+      scopes: ['repo'],
+      expiresAt: '2026-10-08T12:00:00.000Z',
+    });
+    expect(fetch).toHaveBeenCalledWith(
+      `${baseUrl}/grants/grant-1/refresh`,
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
 });
