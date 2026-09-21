@@ -262,8 +262,62 @@ The workflow exchanges the opaque grant through the broker, calls GitHub's
 `/user` endpoint, and returns only the profile's `id`, `login`, and `name`.
 Provider token material is not added to workflow state.
 
-The sample's Podman dev runtime already uses port `8080`, so use `18080` for a
-standalone workflow consumer test:
+### Run the workflow through the Orchestrator UI
+
+Use this startup sequence instead of the sample's automatically started
+Podman runtime when you want to run the demo through the Orchestrator UI
+without invoking the workflow with `curl`.
+
+First, start the workflow demo on port `8080`. It can start before the
+Backstage backend because it does not call the broker until a workflow is run:
+
+```bash
+cd /Users/lholmqui/develop/rhdhorchestrator/orchestrator-demo/10_provider_token_grant
+
+export SECURE_TOKEN_STORAGE_URL='http://localhost:7007/api/secure-token-storage/token'
+export SECURE_TOKEN_STORAGE_SERVICE_TOKEN="${BACKSTAGE_EXTERNAL_ACCESS_TOKEN}"
+
+mvn -q quarkus:dev
+```
+
+In the secure-token-storage sample's `app-config.yaml`, edit the existing
+Orchestrator configuration so it uses the already-running workflow and Data
+Index service. Set `autoStart` to `false` to prevent the backend from starting
+a second SonataFlow runtime on the same port:
+
+```yaml
+orchestrator:
+  sonataFlowService:
+    # Keep the other existing sonataFlowService settings.
+    port: 8080
+    autoStart: false
+  dataIndexService:
+    url: http://localhost:8080
+```
+
+The `sonataFlowService.port` value and the port in `dataIndexService.url` must
+both match the workflow demo's running port. If the demo is running on a port
+other than `8080`, update both values accordingly.
+
+Start the sample application with `yarn dev`, connect GitHub, and approve a
+grant as described above. Then open
+[http://localhost:3000/orchestrator](http://localhost:3000/orchestrator), select
+**Provider Token Grant Consumer**, and select **Run**.
+
+You can leave both form fields empty when the signed-in user has exactly one
+active provider grant. The Orchestrator backend resolves that grant and sends
+it to the workflow in `X-Provider-Token-Grant-Github`. If the user has multiple
+active grants, provide the grant ID and `github` in the form to remove the
+ambiguity. A successful run returns the sanitized GitHub profile without
+placing the provider token in workflow state.
+
+Restore `autoStart: true` when you want the sample backend to manage its
+Podman-backed SonataFlow runtime again.
+
+### Run the workflow directly
+
+When the sample's Podman dev runtime is already using port `8080`, use `18080`
+for a standalone workflow consumer test:
 
 ```bash
 cd /Users/lholmqui/develop/rhdhorchestrator/orchestrator-demo/10_provider_token_grant
