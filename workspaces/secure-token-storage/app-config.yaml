@@ -98,6 +98,9 @@ secureTokenStorage:
       redirectUri: http://localhost:7007/api/secure-token-storage/connections/github/callback
       scopes:
         - read:user
+        # GitHub OAuth Apps do not provide a read-only private repository scope.
+        - repo
+        - read:org
     providers:
       github:
         clientId: ${GITHUB_CLIENT_ID}

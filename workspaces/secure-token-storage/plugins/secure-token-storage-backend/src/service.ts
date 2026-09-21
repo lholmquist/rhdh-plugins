@@ -8,6 +8,7 @@ import {
   createServiceFactory,
   type BackstageCredentials,
   type BackstageServicePrincipal,
+  type LoggerService,
   type RootConfigService,
 } from '@backstage/backend-plugin-api';
 import { DatabaseManager } from '@backstage/backend-defaults/database';
@@ -77,6 +78,7 @@ interface ServiceOptions {
   connectSessionTtlMs?: number;
   defaultGrantTtlMs?: number;
   maxGrantTtlMs?: number;
+  logger?: LoggerService;
 }
 
 const associatedData = (
@@ -189,6 +191,7 @@ export class DefaultSecureTokenStorageService
   private readonly connectSessionTtlMs: number;
   private readonly defaultGrantTtlMs: number;
   private readonly maxGrantTtlMs: number;
+  private readonly logger?: LoggerService;
 
   constructor(enabled: boolean, options: ServiceOptions = {}) {
     this.enabled = enabled;
@@ -202,6 +205,7 @@ export class DefaultSecureTokenStorageService
     this.connectSessionTtlMs = options.connectSessionTtlMs ?? 10 * 60 * 1000;
     this.defaultGrantTtlMs = options.defaultGrantTtlMs ?? 24 * 60 * 60 * 1000;
     this.maxGrantTtlMs = options.maxGrantTtlMs ?? 30 * 24 * 60 * 60 * 1000;
+    this.logger = options.logger;
   }
 
   async getStatus(): Promise<SecureTokenStorageStatus> {
@@ -683,6 +687,11 @@ export class DefaultSecureTokenStorageService
       );
     }
 
+    this.logger?.info('Attempting to refresh expired provider access token', {
+      provider: grant.provider,
+      callerSubject,
+    });
+
     let refreshToken: string;
     let refreshed: Awaited<ReturnType<ProviderTokenRefresher['refresh']>>;
     try {
@@ -978,6 +987,7 @@ export const secureTokenStorageServiceFactory = createServiceFactory({
         (oauth?.getOptionalNumber('defaultGrantTtlSeconds') ?? 86400) * 1000,
       maxGrantTtlMs:
         (oauth?.getOptionalNumber('maxGrantTtlSeconds') ?? 2592000) * 1000,
+      logger,
     });
   },
 });

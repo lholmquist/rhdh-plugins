@@ -56,6 +56,13 @@ secureTokenStorage:
   allowedCallerSubjects:
     - sonataflow
   oauth:
+    userConnection:
+      callerSubject: sonataflow
+      redirectUri: https://backstage.example.com/api/secure-token-storage/connections/github/callback
+      scopes:
+        - read:user
+        - repo
+        - read:org
     providers:
       github:
         clientId: ${GITHUB_CLIENT_ID}
@@ -74,6 +81,14 @@ secureTokenStorage:
 The caller subject resolved from a Backstage service credential must appear in
 `allowedCallerSubjects`. Use a persistent production database and a managed
 secret for the encryption key outside local development.
+
+The GitHub scopes in this example allow the service to read the authenticated
+user profile (`read:user`), list repositories available to the user including
+private repositories (`repo`), and read organization and team membership
+(`read:org`). GitHub OAuth Apps do not offer a read-only private repository
+scope: `repo` also grants write access to public and private repositories. Use
+a GitHub App with fine-grained permissions when that broader access is not
+acceptable.
 
 ## Local test host
 

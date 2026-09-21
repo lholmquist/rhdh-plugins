@@ -3,7 +3,10 @@
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  */
-import { type HttpAuthService } from '@backstage/backend-plugin-api';
+import type {
+  HttpAuthService,
+  LoggerService,
+} from '@backstage/backend-plugin-api';
 import express from 'express';
 import Router from 'express-promise-router';
 import {
@@ -70,6 +73,7 @@ function queryString(value: unknown): string | undefined {
 
 export async function createRouter(options: {
   httpAuth: HttpAuthService;
+  logger?: LoggerService;
   service: SecureTokenStorageService;
   consentUrl?: string;
   userConnection?: {
@@ -295,6 +299,7 @@ export async function createRouter(options: {
   });
 
   router.post('/token', async (request, response) => {
+    options.logger?.info('Secure token storage access token request received');
     try {
       const credentials = await options.httpAuth.credentials(request, {
         allow: ['service'],

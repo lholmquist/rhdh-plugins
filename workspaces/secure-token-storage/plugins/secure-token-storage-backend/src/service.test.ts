@@ -12,6 +12,7 @@ import type { TokenStorageRepository } from './database/repository';
 import type {
   BackstageCredentials,
   BackstageServicePrincipal,
+  LoggerService,
 } from '@backstage/backend-plugin-api';
 
 const key = Buffer.alloc(32, 1).toString('base64');
@@ -137,6 +138,9 @@ describe('DefaultSecureTokenStorageService', () => {
 
   it('refreshes internally and never returns the refresh token', async () => {
     const repository = createRepository();
+    const logger = {
+      info: jest.fn(),
+    } as unknown as jest.Mocked<LoggerService>;
     const cipher = createTokenCipher({
       activeKey: key,
       activeKeyVersion: 'v1',
@@ -184,6 +188,7 @@ describe('DefaultSecureTokenStorageService', () => {
           },
         ],
       ]),
+      logger,
     });
 
     await expect(
@@ -201,6 +206,19 @@ describe('DefaultSecureTokenStorageService', () => {
     expect(
       JSON.stringify(repository.updateConnectionTokens.mock.calls[0]),
     ).not.toContain('rotated-refresh');
+    expect(logger.info).toHaveBeenCalledWith(
+      'Attempting to refresh expired provider access token',
+      {
+        provider: 'github',
+        callerSubject: 'sonataflow',
+      },
+    );
+    expect(JSON.stringify(logger.info.mock.calls)).not.toContain(
+      'expired-access',
+    );
+    expect(JSON.stringify(logger.info.mock.calls)).not.toContain(
+      'refresh-token',
+    );
   });
 
   it('creates a short-lived PKCE session without persisting raw state or verifier', async () => {
