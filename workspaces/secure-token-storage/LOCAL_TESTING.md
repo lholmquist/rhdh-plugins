@@ -76,6 +76,30 @@ export GITHUB_CLIENT_ID='<client-id>'
 export GITHUB_CLIENT_SECRET='<client-secret>'
 ```
 
+The sample requests these GitHub OAuth scopes:
+
+- `read:user` reads the authenticated user's profile through `GET /user`.
+- `repo` allows `GET /user/repos` to include repositories available to the
+  user, including private repositories.
+- `read:org` reads organization and team membership and allows
+  `GET /user/orgs` to include the authenticated user's private organization
+  memberships.
+
+GitHub OAuth Apps do not provide a read-only private repository scope. The
+`repo` scope grants broad read and write access to public and private
+repositories, even though this example only needs to list them. Use a GitHub
+App with fine-grained repository permissions if read-only access is required.
+The GitHub adapter also adds `offline_access` so an expiring provider access
+token can be refreshed without user interaction.
+
+If GitHub is already connected in the sample, disconnect and reconnect the
+provider so GitHub can authorize the expanded scope set and the broker can
+store a new grant containing those scopes.
+
+See GitHub's
+[OAuth App scope reference](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/scopes-for-oauth-apps)
+for the complete permission details.
+
 Generate a base64-encoded 32-byte encryption key. Keep it stable for the
 lifetime of the backend process:
 
@@ -209,7 +233,7 @@ CONNECTION_RESPONSE="$(
     -H 'Content-Type: application/json' \
     -d '{
       "userEntityRef": "user:default/lholmquist",
-      "scopes": ["read:user"],
+      "scopes": ["read:user", "repo", "read:org"],
       "redirectUri": "http://localhost:7007/api/secure-token-storage/connections/github/callback"
     }'
 )"

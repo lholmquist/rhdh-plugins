@@ -7,8 +7,10 @@ import express from 'express';
 import request from 'supertest';
 import type {
   BackstageCredentials,
+  BackstageServicePrincipal,
   BackstageUserPrincipal,
   HttpAuthService,
+  LoggerService,
 } from '@backstage/backend-plugin-api';
 import type { SecureTokenStorageService } from '@red-hat-developer-hub/backstage-plugin-secure-token-storage-node';
 import { createRouter } from './router';
@@ -27,7 +29,49 @@ const userCredentials = (
   },
 });
 
+const serviceCredentials = (
+  subject: string,
+): BackstageCredentials<BackstageServicePrincipal> => ({
+  $$type: '@backstage/BackstageCredentials',
+  principal: { type: 'service', subject },
+});
+
 describe('secure token storage router', () => {
+  it('logs every access token endpoint request without token material', async () => {
+    const httpAuth = {
+      credentials: jest
+        .fn()
+        .mockResolvedValue(serviceCredentials('sonataflow')),
+    } as unknown as jest.Mocked<HttpAuthService>;
+    const logger = {
+      info: jest.fn(),
+    } as unknown as jest.Mocked<LoggerService>;
+    const service = {
+      getAccessToken: jest.fn().mockResolvedValue({
+        accessToken: 'provider-access-token',
+        scopes: ['repo'],
+      }),
+    } as unknown as jest.Mocked<SecureTokenStorageService>;
+    const app = express();
+    app.use(
+      '/api/secure-token-storage',
+      await createRouter({ httpAuth, logger, service }),
+    );
+
+    await request(app)
+      .post('/api/secure-token-storage/token')
+      .send({ grantId: 'grant-1', provider: 'github' })
+      .expect(200);
+
+    expect(logger.info).toHaveBeenCalledWith(
+      'Secure token storage access token request received',
+    );
+    expect(JSON.stringify(logger.info.mock.calls)).not.toContain(
+      'provider-access-token',
+    );
+    expect(JSON.stringify(logger.info.mock.calls)).not.toContain('grant-1');
+  });
+
   it('derives the caller subject from credentials instead of request data', async () => {
     const httpAuth = {
       credentials: jest

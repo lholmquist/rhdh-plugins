@@ -22,13 +22,15 @@ export const secureTokenStoragePlugin = createBackendPlugin({
       deps: {
         httpRouter: coreServices.httpRouter,
         httpAuth: coreServices.httpAuth,
+        logger: coreServices.logger,
         config: coreServices.rootConfig,
         secureTokenStorage: secureTokenStorageServiceRef,
       },
-      async init({ httpRouter, httpAuth, config, secureTokenStorage }) {
+      async init({ httpRouter, httpAuth, logger, config, secureTokenStorage }) {
         httpRouter.use(
           await createRouter({
             httpAuth,
+            logger,
             service: secureTokenStorage,
             consentUrl: config.getOptionalString(
               'secureTokenStorage.oauth.consentUrl',
