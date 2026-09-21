@@ -1,48 +1,55 @@
-# Local testing guide
+# Secure token storage local testing guide
 
-This guide explains how to exercise the secure token storage functionality with
-the full-stack sample application in `workspaces/secure-token-storage/packages`.
-The sample includes:
+This is the canonical guide for running the full-stack sample application in
+`workspaces/secure-token-storage/packages`, creating a GitHub provider grant,
+and using that grant from the provider-token-grant workflow.
 
-- a Backstage frontend with the provider connection and consent page;
-- a Backstage backend with the secure token storage broker;
-- the Orchestrator frontend and backend plugins; and
-- optional Podman-backed SonataFlow development mode.
+The complete flow is:
 
-The sample uses an in-memory SQLite database. Restarting the backend removes
-all local connections, grants, and audit data.
+1. A user signs in to Backstage and authorizes GitHub.
+2. The secure-token-storage backend encrypts and stores the provider tokens.
+3. The user approves an opaque, caller-bound grant.
+4. Orchestrator passes the grant ID to a workflow in a request header. If the
+   workflow form omits the grant ID, the backend can resolve an active grant
+   for the initiating user.
+5. The workflow presents the grant and its service credential to the broker.
+6. The broker returns a usable provider access token to the trusted workflow,
+   refreshing an expired provider token when possible.
+7. The workflow uses the token immediately and returns only a sanitized GitHub
+   profile.
+
+The sample uses an in-memory SQLite database. Restarting the Backstage backend
+removes all local connections, grants, and audit data.
 
 ## Prerequisites
 
 Install or have access to:
 
-- Node.js and Yarn versions supported by this repository;
-- a GitHub or Microsoft OAuth application, if testing a real provider
-  connection; and
-- Podman, if testing the Orchestrator integration.
+- Node.js 22 or 24 and the repository's Yarn version;
+- a GitHub OAuth application;
+- `jq` for the filtered command-line checks;
+- Podman for the sample Orchestrator development runtime; and
+- Java 21 and Maven or `kn-workflow` for the standalone workflow test.
 
-For GitHub, register this callback URL:
-
-```text
-http://localhost:7007/api/secure-token-storage/connections/github/callback
-```
-
-Backstage GitHub sign-in uses this callback URL:
+Configure the GitHub OAuth application with both callback URLs:
 
 ```text
 http://localhost:7007/api/auth/github/handler/frame
+http://localhost:7007/api/secure-token-storage/connections/github/callback
 ```
 
-For Microsoft, register this callback URL:
+The first callback is for Backstage sign-in. The second is for the provider
+connection whose token is stored by secure token storage.
+
+The backend also has a Microsoft adapter. To test it, register this callback:
 
 ```text
 http://localhost:7007/api/secure-token-storage/connections/microsoft/callback
 ```
 
-Keep the OAuth client ID and secret outside the repository. The sample reads
-them from environment variables through `app-config.yaml`.
+Keep all OAuth credentials outside the repository.
 
-## One-time dependency setup
+## Install dependencies
 
 From the repository root, install the workspace dependencies:
 
@@ -51,126 +58,96 @@ cd /Users/lholmqui/develop/redhat-developer/rhdh-plugins
 YARN_ENABLE_SCRIPTS=false yarn install --immutable
 ```
 
-If native dependencies such as `better-sqlite3` have not been built in the
-local checkout, rerun the workspace install with build scripts enabled:
+If a native dependency such as `better-sqlite3` has not been built for the
+active Node.js version, rerun the workspace install with scripts enabled:
 
 ```bash
 cd /Users/lholmqui/develop/redhat-developer/rhdh-plugins/workspaces/secure-token-storage
 YARN_ENABLE_SCRIPTS=true yarn install
 ```
 
-## Configure the local caller identity
+## Configure the environment
 
-The sample configuration contains a local-only static Backstage service
-credential whose subject is `my-external-feed`. Secure token storage currently
-allows only the `sonataflow` caller subject:
+The current sample uses the same GitHub OAuth application for Backstage
+sign-in and the secure-token-storage GitHub connection:
 
-```yaml
-backend:
-  auth:
-    externalAccess:
-      - type: static
-        options:
-          token: bXljdXJscGFzc3dkCg==
-          subject: my-external-feed
-
-secureTokenStorage:
-  allowedCallerSubjects:
-    - sonataflow
+```bash
+export GITHUB_CLIENT_ID='<client-id>'
+export GITHUB_CLIENT_SECRET='<client-secret>'
 ```
 
-Before testing the service-to-broker calls, make these values agree in the
-local `app-config.yaml`. The simplest local-only option is to change the
-external access subject to `sonataflow`. Do not use this sample credential in a
-shared or production environment.
+Generate a base64-encoded 32-byte encryption key. Keep it stable for the
+lifetime of the backend process:
 
-Set the credential in the shell used for the request:
+```bash
+export SECURE_TOKEN_STORAGE_ENCRYPTION_KEY="$(
+  node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"
+)"
+```
+
+The sample contains this local-only Backstage service credential:
 
 ```bash
 export BACKSTAGE_EXTERNAL_ACCESS_TOKEN='bXljdXJscGFzc3dkCg=='
 ```
 
-If you do not configure a secure-token-storage OAuth provider, the health
-endpoint and the sample UI can still be tested, but the provider connection
-flow will return `provider-not-configured`.
+Its configured subject is `sonataflow`, which matches
+`secureTokenStorage.allowedCallerSubjects`. Do not use this credential in a
+shared or production environment.
 
-## Configure an OAuth provider
-
-Export the credentials for the provider you want to test before starting the
-backend. The sample now supports GitHub sign-in and GitHub provider-token
-connections. GitHub is the shortest path through the sample:
+For Microsoft, the equivalent provider variables are:
 
 ```bash
-export GITHUB_OAUTH_CLIENT_ID='your-local-client-id'
-export GITHUB_OAUTH_CLIENT_SECRET='your-local-client-secret'
-```
-
-These are two separate GitHub OAuth uses:
-
-- `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` configure Backstage user
-  sign-in.
-- `GITHUB_OAUTH_CLIENT_ID` and `GITHUB_OAUTH_CLIENT_SECRET` configure the
-  secure-token-storage provider connection.
-
-They may use the same GitHub OAuth application only if its callback URLs and
-permissions are configured for both flows. The Backstage sign-in callback is
-handled by the auth backend; the secure-token-storage callback is the
-`/api/secure-token-storage/connections/github/callback` URL above.
-
-For Backstage GitHub sign-in, export:
-
-```bash
-export GITHUB_CLIENT_ID='your-local-client-id'
-export GITHUB_CLIENT_SECRET='your-local-client-secret'
-```
-
-For Microsoft, use:
-
-```bash
-export MICROSOFT_OAUTH_CLIENT_ID='your-local-client-id'
-export MICROSOFT_OAUTH_CLIENT_SECRET='your-local-client-secret'
+export MICROSOFT_OAUTH_CLIENT_ID='<client-id>'
+export MICROSOFT_OAUTH_CLIENT_SECRET='<client-secret>'
 export MICROSOFT_OAUTH_TENANT='common'
 ```
 
-The configured provider must use one of the exact callback URLs in
-`secureTokenStorage.oauth.allowedRedirectUris`.
-
 ## Start the sample application
 
-Use two terminals. In the first terminal, start the backend from the sample
-workspace directory:
+Start the Podman machine before the backend so the Orchestrator plugin can
+start its SonataFlow development container:
+
+```bash
+podman machine start
+podman ps
+```
+
+From the sample workspace, start the frontend and backend together:
 
 ```bash
 cd /Users/lholmqui/develop/redhat-developer/rhdh-plugins/workspaces/secure-token-storage
-export SECURE_TOKEN_STORAGE_ENCRYPTION_KEY="$(node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))")"
+yarn dev
+```
+
+The environment variables from the previous section must be exported in this
+terminal. The frontend runs on port `3000`, the Backstage backend on `7007`,
+and the configured Podman-backed SonataFlow development runtime on `8080`.
+
+For separate logs or backend debugging, use two terminals instead:
+
+```bash
+# Terminal 1
+cd /Users/lholmqui/develop/redhat-developer/rhdh-plugins/workspaces/secure-token-storage
 yarn workspace backend start --config ../../app-config.yaml
 ```
 
-The encryption key must be a base64-encoded 32-byte value. Keep it stable for
-the lifetime of the backend process. Starting the backend again with the same
-in-memory database is not required; all data is intentionally discarded on
-restart.
-
-In the second terminal, start the frontend:
-
 ```bash
+# Terminal 2
 cd /Users/lholmqui/develop/redhat-developer/rhdh-plugins/workspaces/secure-token-storage
 yarn workspace app start
 ```
 
-Open the sample at [http://localhost:3000](http://localhost:3000). The sign-in
-page now offers **Guest** and **GitHub**. Select GitHub to validate the
-Backstage auth provider, or select Guest to continue with the local guest
-identity. Then open the **Provider connections** page at
-[http://localhost:3000/secure-token-storage](http://localhost:3000/secure-token-storage).
+Open [http://localhost:3000](http://localhost:3000) and sign in with GitHub.
+The sample catalog contains `user:default/lholmquist`, which matches the
+configured `usernameMatchingUserEntityName` resolver. If a different GitHub
+account is used, update the local user entity in `examples/org.yaml` so its
+name matches the GitHub username, then restart the backend.
 
-The sample catalog includes a local `User` entity named `lholmquist`, which
-matches the GitHub username used by the configured
-`usernameMatchingUserEntityName` resolver. If you use a different GitHub
-account, update the `User` entity name in `catalog-info.yaml` to match your
-GitHub username and restart the backend.
+Guest sign-in remains available for basic UI testing, but the GitHub identity
+is the intended end-to-end path.
 
-## Smoke test the broker
+## Smoke-test the broker
 
 The health endpoint does not require authentication:
 
@@ -184,71 +161,72 @@ Expected response:
 { "enabled": true }
 ```
 
-The frontend should also load the active-grants list. With a new in-memory
-database it should display `No grants found.`.
+Open the **Provider connections** page at
+[http://localhost:3000/secure-token-storage](http://localhost:3000/secure-token-storage).
+With a new in-memory database, the active-grants section should display
+`No grants found.`
 
-## Test the OAuth connect and consent flow
+## Connect GitHub and approve a grant
 
-The sample UI intentionally does not initiate OAuth connections. A trusted
-service starts a connection, and the user reviews the resulting consent
-request in the UI.
+### Recommended UI flow
 
-### 1. Start a provider connection
+Select **Connect GitHub** on the Provider connections page. The frontend asks
+the backend to create a one-time connection session and then navigates to
+GitHub automatically. The `sonataflow` service credential is never exposed to
+the browser.
 
-The following example starts a GitHub connection for the local guest user. The
-response contains a one-time `authorizationUrl` and `sessionId`:
+After authorizing GitHub, the callback returns to the Provider connections
+page. Select **Approve** to create a caller-bound grant, or **Reject** to
+discard the connection request.
+
+After approval, the active-grants section shows the provider, scopes, grant
+ID, and expiration time. Copy the grant ID when running the direct broker or
+standalone workflow tests below:
 
 ```bash
-curl --fail --silent --show-error \
-  -X POST \
-  http://localhost:7007/api/secure-token-storage/connections/github/start \
-  -H "Authorization: Bearer ${BACKSTAGE_EXTERNAL_ACCESS_TOKEN}" \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "userEntityRef": "user:default/guest",
-    "scopes": ["read:user"],
-    "redirectUri": "http://localhost:7007/api/secure-token-storage/connections/github/callback"
-  }'
+export GRANT_ID='<grant-id-from-active-grants>'
 ```
 
-Copy the `authorizationUrl` from the response into a browser. Sign in to the
-provider and authorize the requested scopes. The provider redirects the
-browser to the backend callback, which then redirects to the sample consent
-page.
+The page supports these operations:
 
-If the guest user entity reference differs in the running host, use the value
-shown by the backend authentication logs instead of
-`user:default/guest`.
+- **Refresh** extends an expired or expiring grant while preserving its grant
+  ID.
+- **Revoke** invalidates one grant and removes it from the active list.
+- **Disconnect provider** revokes the provider's grants and removes its stored
+  connection.
 
-### 2. Approve or reject the request
+### Optional trusted-service flow
 
-The consent page displays the provider and requested scopes. Select **Approve**
-to create a caller-bound grant, or **Reject** to discard the connection
-request. The grant list should show the provider, scopes, grant ID, and expiry
-time after approval.
+The service-authenticated endpoint remains available for integrations and
+low-level testing:
 
-The page supports these user operations:
+```bash
+CONNECTION_RESPONSE="$(
+  curl --fail --silent --show-error \
+    -X POST \
+    http://localhost:7007/api/secure-token-storage/connections/github/start \
+    -H "Authorization: Bearer ${BACKSTAGE_EXTERNAL_ACCESS_TOKEN}" \
+    -H 'Content-Type: application/json' \
+    -d '{
+      "userEntityRef": "user:default/lholmquist",
+      "scopes": ["read:user"],
+      "redirectUri": "http://localhost:7007/api/secure-token-storage/connections/github/callback"
+    }'
+)"
 
-- **Revoke** invalidates one grant.
-- **Disconnect provider** revokes the provider's grants and removes the
-  provider connection.
-- Refreshing the page reloads grants from the backend.
+printf '%s' "$CONNECTION_RESPONSE" | jq -r .authorizationUrl
+```
 
-To test rejection, repeat the connection flow and select **Reject**. The
-session is consumed and no grant should be created.
+Open the printed authorization URL once. OAuth connection state is
+single-use, so generate a new URL if the callback returns
+`connect-session-consumed`.
 
 ## Test service-authenticated token retrieval
 
-Only a trusted service may call the token endpoint. Use the grant ID shown in
-the consent page or returned by the grant-list API. Do not print or save the
-access token.
-
-The grants endpoint is user-authenticated, so it is simplest to inspect grants
-in the browser UI. The token endpoint itself requires a service credential:
+Only a trusted service may call the token endpoint. The following command
+filters the secret from the displayed response:
 
 ```bash
-export GRANT_ID='copy-the-grant-id-from-the-ui'
-
 curl --fail --silent --show-error \
   -X POST \
   http://localhost:7007/api/secure-token-storage/token \
@@ -258,73 +236,155 @@ curl --fail --silent --show-error \
   | jq '{expiresAt, scopes, hasAccessToken: (.accessToken != null)}'
 ```
 
-The filtered output should show `hasAccessToken: true`. The raw response
-contains the provider access token and must be treated as secret material.
-Never put it in workflow input, source control, shell history, screenshots, or
-application logs.
+The output should contain `"hasAccessToken": true`. The raw response contains
+the provider access token. Never put it in workflow input, source control,
+shell history, screenshots, or application logs.
 
-Verify caller binding by changing the configured caller subject or using a
-different service credential. The request should be rejected with a
-`caller-not-authorized` error. After revoking the grant in the UI, repeating
-the token request should return `grant-revoked` or another appropriate
-denial.
+Verify caller binding by using a service credential with a different subject.
+The broker should return `caller-not-authorized`. After revoking the grant in
+the UI, repeating the token request should return `grant-revoked` or another
+appropriate denial.
 
-## Optional Orchestrator and Podman test
+## Run the provider-token-grant workflow
 
-The sample backend registers both the Orchestrator backend and the secure token
-storage Orchestrator module. Its `app-config.yaml` is configured to start
-SonataFlow in Podman dev mode:
+The current workflow consumer is located at:
 
-```yaml
-orchestrator:
-  sonataFlowService:
-    runtime: podman
-    port: 8899
-    autoStart: true
+```text
+/Users/lholmqui/develop/rhdhorchestrator/orchestrator-demo/10_provider_token_grant
 ```
 
-Before starting the backend, verify that Podman is available:
+It accepts a grant in either of these forms:
+
+- normal workflow input: `{ "grantId": "...", "provider": "github" }`; or
+- the `X-Provider-Token-Grant-Github` request header.
+
+The workflow exchanges the opaque grant through the broker, calls GitHub's
+`/user` endpoint, and returns only the profile's `id`, `login`, and `name`.
+Provider token material is not added to workflow state.
+
+The sample's Podman dev runtime already uses port `8080`, so use `18080` for a
+standalone workflow consumer test:
 
 ```bash
-podman --version
-podman ps
+cd /Users/lholmqui/develop/rhdhorchestrator/orchestrator-demo/10_provider_token_grant
+
+export SECURE_TOKEN_STORAGE_URL='http://localhost:7007/api/secure-token-storage/token'
+export SECURE_TOKEN_STORAGE_SERVICE_TOKEN="${BACKSTAGE_EXTERNAL_ACCESS_TOKEN}"
+
+mvn -q quarkus:dev -Dquarkus.http.port=18080
 ```
 
-Start the backend using the command above. The Orchestrator integration clones
-the configured workflow repository into
-`packages/backend/.devModeTemp/repository` and uses
-`host.containers.internal` so the SonataFlow container can reach the host
-backend. Kafka is not configured in this sample, so event-triggered workflow
-execution is disabled.
+Run it with the grant as workflow input:
 
-This validates sample-host startup and the secure-token-storage module
-registration. The provider-token-grant workflow accepts the grant reference as
-normal workflow input, or from the provider-specific header that Orchestrator
-adds from the explicit `providerTokenGrants` request field. When the form omits
-`grantId`, the Orchestrator backend resolves the initiating user's active grant
-through the secure-token-storage module, using the submitted provider when
-available. It then adds `X-Provider-Token-Grant-Github`; the aggregate
-`X-Provider-Token-Grants` header remains available for consumers that need to
-handle multiple grants. If the provider is also omitted, automatic resolution
-only occurs when the user has an unambiguous active provider grant.
-Treat direct broker testing above as the authoritative validation of grant
-authorization and token retrieval.
+```bash
+curl --fail --silent --show-error \
+  -X POST \
+  http://localhost:18080/provider-token-grant \
+  -H 'Content-Type: application/json' \
+  -d "{\"grantId\":\"${GRANT_ID}\",\"provider\":\"github\"}" \
+  | jq
+```
 
-## Useful failure checks
+Or validate the Orchestrator header contract directly:
 
-| Symptom                                            | Check                                                                                                                         |
-| -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `enabled` is `false` or the route is missing       | Confirm `secureTokenStorage.enabled: true` and that the backend loads the secure token storage plugin.                        |
-| Backend fails during startup because of encryption | Confirm `SECURE_TOKEN_STORAGE_ENCRYPTION_KEY` is set and decodes to 32 bytes.                                                 |
-| `provider-not-configured`                          | Export the provider client ID and secret before starting the backend.                                                         |
-| `invalid-redirect-uri`                             | Use the exact callback URL listed in `app-config.yaml` and registered with the provider.                                      |
-| `caller-not-authorized`                            | Make `backend.auth.externalAccess.options.subject` match an entry in `secureTokenStorage.allowedCallerSubjects`.              |
-| Consent page cannot load grants                    | Confirm the frontend is using `http://localhost:3000`, the backend is on port `7007`, and the guest auth provider is running. |
-| Podman workflow startup fails                      | Check `podman ps`, container image availability, port `8899`, and the generated `packages/backend/.devModeTemp` directory.    |
+```bash
+curl --fail --silent --show-error \
+  -X POST \
+  http://localhost:18080/provider-token-grant \
+  -H 'Content-Type: application/json' \
+  -H "X-Provider-Token-Grant-Github: ${GRANT_ID}" \
+  -d '{}' \
+  | jq
+```
+
+The completed workflow data should contain a sanitized `profile` object and
+must not contain an access token.
+
+### Orchestrator behavior
+
+The sample backend registers the secure-token-storage Orchestrator module.
+When a workflow is run through Orchestrator:
+
+- an explicit top-level `grantId` and `provider` from the workflow form are
+  forwarded as `providerTokenGrants`;
+- Orchestrator sends `X-Provider-Token-Grant-Github` plus the aggregate
+  `X-Provider-Token-Grants` header to SonataFlow;
+- if the form omits `grantId`, the backend queries secure token storage for an
+  active grant belonging to the initiating user and provider; and
+- if both provider and grant ID are omitted, automatic resolution occurs only
+  when the user has exactly one unambiguous active provider grant.
+
+The local `10_provider_token_grant` workflow must be run or deployed in the
+SonataFlow/Data Index environment configured for Orchestrator before it appears
+in the Orchestrator UI. Starting it standalone on port `18080` validates the
+workflow-to-broker contract but does not register it in the sample's separate
+Podman dev runtime.
+
+## Test automatic GitHub access-token refresh
+
+The broker refreshes an expired provider access token when the workflow or
+another trusted service requests it. It uses the refresh token server-side,
+encrypts the new access token and any rotated refresh token back into the
+connection, and returns only the usable access token. The grant ID does not
+change.
+
+GitHub expiring user tokens are normally valid for eight hours, so the fastest
+local test is to simulate expiration in the debugger. GitHub must issue a
+refresh token for this test. The adapter requests `offline_access`; reconnect
+the provider after enabling expiring user tokens for the GitHub application if
+the existing connection does not have a refresh token.
+
+1. Start the backend with the **Launch Secure Token Storage Workspace** VS Code
+   configuration and the environment variables described above.
+2. Set a breakpoint at the expiration check in
+   `plugins/secure-token-storage-backend/src/service.ts`, around line 647.
+3. Trigger the direct token request above or run the workflow.
+4. When execution stops, enter this in the VS Code Debug Console:
+
+   ```js
+   connection.accessTokenExpiresAt = new Date(0);
+   ```
+
+5. Continue execution. The code should enter the refresh path and reach the
+   GitHub refresher in
+   `plugins/secure-token-storage-backend/src/providers.ts`, around line 202.
+
+The request should still report `hasAccessToken: true`, and the backend should
+update the encrypted connection data. Do not print the raw token.
+
+`provider-refresh-required` means that the connection has no usable refresh
+token or no refresher is configured. `grant-expired` means the grant itself,
+not the provider access token, has expired; refresh or reapprove the grant.
+
+## Verify grant enforcement
+
+Revoke the grant from the Provider connections page and invoke the direct
+broker request or workflow again. The broker should reject the grant, and the
+workflow should fail without logging or returning token material.
+
+Select **Disconnect provider** to remove the stored connection and revoke all
+of its grants. Reconnect and approve again to create a new active connection
+and grant.
+
+## Troubleshooting
+
+| Symptom                                  | Check                                                                                                                     |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `provider-not-configured`                | Export `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` before starting the backend.                                         |
+| `connect-session-consumed`               | Generate and use a new authorization URL; connection state is intentionally single-use.                                   |
+| `invalid-redirect-uri`                   | Use the exact callback URL in `app-config.yaml` and registered with GitHub.                                               |
+| GitHub sign-in cannot resolve the user   | Confirm the GitHub username matches the `User` entity name in `examples/org.yaml`.                                        |
+| `caller-not-authorized`                  | Confirm the service token maps to `sonataflow`, which must remain in `allowedCallerSubjects`.                             |
+| Provider connections cannot load grants  | Confirm the frontend is on port `3000`, the backend is on `7007`, and the browser has an authenticated Backstage session. |
+| `provider-refresh-required`              | Reconnect after enabling GitHub expiring user tokens so the stored connection includes a refresh token.                   |
+| Standalone workflow cannot reach broker  | Use `localhost` for a host process and `host.containers.internal` for a Podman container.                                 |
+| Workflow service token is missing        | Export `SECURE_TOKEN_STORAGE_SERVICE_TOKEN` in the workflow terminal.                                                     |
+| Podman runtime startup fails             | Check `podman ps`, image availability, port `8080`, and `packages/backend/.devModeTemp`.                                  |
+| Data disappears after restarting backend | The sample intentionally uses an in-memory SQLite database.                                                               |
 
 ## Reset the local test state
 
-Stop the frontend and backend with `Ctrl-C`. Because the sample uses an
-in-memory database, restarting the backend resets all grants and connections.
-If the SonataFlow container remains running, inspect it with `podman ps` and
-stop that specific development container before starting another test run.
+Stop the application and workflow with `Ctrl-C`. Restarting the Backstage
+backend resets all grants and connections because the database is in memory.
+If the SonataFlow development container remains, identify it with `podman ps`
+and stop only that container before the next run.
