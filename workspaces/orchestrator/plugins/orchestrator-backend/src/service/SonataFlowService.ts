@@ -34,6 +34,7 @@ import {
   WorkflowInfo,
   WorkflowOverview,
 } from '@red-hat-developer-hub/backstage-plugin-orchestrator-common';
+import type { ProviderTokenGrantResolver } from '@red-hat-developer-hub/backstage-plugin-orchestrator-node';
 
 import { randomUUID } from 'node:crypto';
 
@@ -42,6 +43,22 @@ import { Pagination } from '../types/pagination';
 import { DataIndexService } from './DataIndexService';
 import { getWorkflowRunStats, groupByProcessIdAndVersion } from './Helper';
 
+const getProviderFromInputData = (
+  inputData?: ProcessInstanceVariables,
+): string | undefined => {
+  const workflowdata = inputData?.workflowdata;
+  if (
+    typeof workflowdata !== 'object' ||
+    workflowdata === null ||
+    Array.isArray(workflowdata)
+  ) {
+    return undefined;
+  }
+
+  const provider = (workflowdata as Record<string, unknown>).provider;
+  return typeof provider === 'string' && provider.trim() ? provider : undefined;
+};
+
 export class SonataFlowService {
   private readonly orchestratorKafkaImpl?: Kafka;
   private readonly orchestratorKafkaMessageKey?: string;
@@ -49,6 +66,7 @@ export class SonataFlowService {
     private readonly dataIndexService: DataIndexService,
     private readonly logger: LoggerService,
     private readonly kafkaServiceOptions?: OrchestratorKafkaServiceOptions,
+    private readonly providerTokenGrantResolver?: ProviderTokenGrantResolver,
   ) {
     // If there are kafkaServiceOptions, then do the implemntation
     if (this.kafkaServiceOptions) {
@@ -64,6 +82,36 @@ export class SonataFlowService {
 
   getOrchestratorKafkaImpl() {
     return this.orchestratorKafkaImpl;
+  }
+
+  private async resolveProviderTokenGrants(args: {
+    inputData?: ProcessInstanceVariables;
+    initiatorEntity?: string;
+    providerTokenGrants?: Array<ProviderTokenGrantReference>;
+  }): Promise<Array<ProviderTokenGrantReference> | undefined> {
+    if (args.providerTokenGrants?.length) {
+      return args.providerTokenGrants;
+    }
+    if (
+      !args.initiatorEntity ||
+      !this.providerTokenGrantResolver?.resolveProviderTokenGrant
+    ) {
+      return undefined;
+    }
+
+    try {
+      const grant =
+        await this.providerTokenGrantResolver.resolveProviderTokenGrant({
+          userEntityRef: args.initiatorEntity,
+          provider: getProviderFromInputData(args.inputData),
+        });
+      return grant ? [grant] : undefined;
+    } catch (error) {
+      this.logger.warn(
+        `Unable to resolve a provider token grant for ${args.initiatorEntity}: ${(error as Error).message}`,
+      );
+      return undefined;
+    }
   }
 
   public async fetchWorkflowInfoOnService(args: {
@@ -218,11 +266,13 @@ export class SonataFlowService {
     authTokens?: Array<AuthToken>;
     providerTokenGrants?: Array<ProviderTokenGrantReference>;
     backstageToken?: string;
+    initiatorEntity?: string;
   }): Promise<WorkflowExecutionResponse | undefined> {
     if (!this.orchestratorKafkaImpl) {
       this.logger.error('No Orchestrator kafka implementation added');
       throw new Error('No Orchestrator kafka implementation added');
     }
+    const providerTokenGrants = await this.resolveProviderTokenGrants(args);
     const contextAttributeId = randomUUID();
     // The data that needs to be part of the clouevent data is in the workflowdata key.
     // We need to spread the workflowdata payload into the clouevent data,
@@ -245,9 +295,7 @@ export class SonataFlowService {
     const eventData = {
       ...workflowdataPayload,
       [args.contextAttribute]: contextAttributeId,
-      ...(args.providerTokenGrants?.length
-        ? { providerTokenGrants: args.providerTokenGrants }
-        : {}),
+      ...(providerTokenGrants?.length ? { providerTokenGrants } : {}),
     };
     const triggeringCloudEvent = new CloudEvent({
       datacontenttype: 'application/json',
@@ -302,14 +350,16 @@ export class SonataFlowService {
     authTokens?: Array<AuthToken>;
     providerTokenGrants?: Array<ProviderTokenGrantReference>;
     backstageToken?: string | undefined;
+    initiatorEntity?: string;
   }): Promise<WorkflowExecutionResponse | undefined> {
     const urlToFetch = `${args.serviceUrl}/${args.definitionId}`;
+    const providerTokenGrants = await this.resolveProviderTokenGrants(args);
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
 
     this.addAuthHeaders(headers, args.authTokens, args.backstageToken);
-    this.addProviderTokenGrantHeaders(headers, args.providerTokenGrants);
+    this.addProviderTokenGrantHeaders(headers, providerTokenGrants);
     const headerKeys = Object.keys(headers);
     this.logger.info(
       `Executing workflow ${args.definitionId} with headers: ${headerKeys.join(', ')}`,
@@ -381,6 +431,12 @@ export class SonataFlowService {
     if (!providerTokenGrants?.length) {
       return;
     }
+
+    for (const grant of providerTokenGrants) {
+      headers[`X-Provider-Token-Grant-${capitalize(grant.provider)}`] =
+        grant.grantId;
+    }
+
     headers['X-Provider-Token-Grants'] = JSON.stringify(
       providerTokenGrants.map(grant => ({
         grantId: grant.grantId,

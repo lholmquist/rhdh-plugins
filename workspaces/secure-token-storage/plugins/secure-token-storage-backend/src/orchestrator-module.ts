@@ -23,7 +23,33 @@ export const secureTokenStorageOrchestratorModule = createBackendModule({
         secureTokenStorage: secureTokenStorageServiceRef,
       },
       async init({ providerTokenGrants, secureTokenStorage }) {
-        providerTokenGrants.setProviderTokenGrantResolver(secureTokenStorage);
+        providerTokenGrants.setProviderTokenGrantResolver({
+          getAccessToken: options => secureTokenStorage.getAccessToken(options),
+          resolveProviderTokenGrant: async ({ userEntityRef, provider }) => {
+            const grants = await secureTokenStorage.listGrants({
+              userEntityRef,
+              provider,
+            });
+            const activeGrants = grants.filter(
+              grant =>
+                !grant.revokedAt && grant.expiresAt.getTime() > Date.now(),
+            );
+
+            if (!provider) {
+              const providers = new Set(
+                activeGrants.map(grant => grant.provider),
+              );
+              if (providers.size !== 1) {
+                return undefined;
+              }
+            }
+
+            const grant = activeGrants[0];
+            return grant
+              ? { grantId: grant.grantId, provider: grant.provider }
+              : undefined;
+          },
+        });
       },
     });
   },

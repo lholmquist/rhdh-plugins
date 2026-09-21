@@ -37,6 +37,7 @@ import type { JSONSchema7 } from 'json-schema';
 import {
   AuthTokenDescriptor,
   InputSchemaResponseDTO,
+  ProviderTokenGrantReference,
   QUERY_PARAM_INSTANCE_ID,
 } from '@red-hat-developer-hub/backstage-plugin-orchestrator-common';
 import {
@@ -66,6 +67,28 @@ import { SamlSsoExpiredDialog } from '../ui/SamlSsoExpiredDialog';
 import MissingSchemaNotice from './MissingSchemaNotice';
 import { mergeQueryParamsIntoFormData } from './queryParamsToFormData';
 import { getSchemaUpdater } from './schemaUpdater';
+
+/**
+ * Extracts the provider grant reference used by the secure-token-storage
+ * workflow prototype while preserving the original workflow parameters.
+ */
+const getProviderTokenGrants = (
+  parameters: JsonObject,
+): ProviderTokenGrantReference[] | undefined => {
+  const grantId = parameters.grantId;
+  const provider = parameters.provider;
+
+  if (
+    typeof grantId !== 'string' ||
+    !grantId.trim() ||
+    typeof provider !== 'string' ||
+    !provider.trim()
+  ) {
+    return undefined;
+  }
+
+  return [{ grantId, provider }];
+};
 
 export const ExecuteWorkflowPage = () => {
   const { t } = useTranslation();
@@ -137,10 +160,12 @@ export const ExecuteWorkflowPage = () => {
         const executeParameters = isEvent
           ? { ...parameters, isEvent: true }
           : parameters;
+        const providerTokenGrants = getProviderTokenGrants(parameters);
         const response = await orchestratorApi.executeWorkflow({
           workflowId,
           parameters: executeParameters,
           authTokens,
+          ...(providerTokenGrants ? { providerTokenGrants } : {}),
           targetEntity: targetEntity ?? undefined,
         });
         if (response.data.id === 'kafkaEvent') {

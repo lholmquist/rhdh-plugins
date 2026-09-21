@@ -298,11 +298,17 @@ backend. Kafka is not configured in this sample, so event-triggered workflow
 execution is disabled.
 
 This validates sample-host startup and the secure-token-storage module
-registration. The current prototype workflow consumer still accepts the grant
-reference as workflow input; it does not yet make the runtime
-`X-Provider-Token-Grants` header-to-operation mapping an end-to-end workflow
-contract. Treat direct broker testing above as the authoritative validation of
-grant authorization and token retrieval until that runtime slice is completed.
+registration. The provider-token-grant workflow accepts the grant reference as
+normal workflow input, or from the provider-specific header that Orchestrator
+adds from the explicit `providerTokenGrants` request field. When the form omits
+`grantId`, the Orchestrator backend resolves the initiating user's active grant
+through the secure-token-storage module, using the submitted provider when
+available. It then adds `X-Provider-Token-Grant-Github`; the aggregate
+`X-Provider-Token-Grants` header remains available for consumers that need to
+handle multiple grants. If the provider is also omitted, automatic resolution
+only occurs when the user has an unambiguous active provider grant.
+Treat direct broker testing above as the authoritative validation of grant
+authorization and token retrieval.
 
 ## Useful failure checks
 

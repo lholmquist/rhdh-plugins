@@ -58,6 +58,16 @@ export interface ProviderTokenGrantResolver {
     expiresAt?: Date;
     scopes: string[];
   }>;
+
+  /**
+   * Finds an active grant reference for a Backstage user. Implementations
+   * should return undefined when the provider is ambiguous or no grant is
+   * available.
+   */
+  resolveProviderTokenGrant?(options: {
+    userEntityRef: string;
+    provider?: string;
+  }): Promise<ProviderTokenGrantReference | undefined>;
 }
 
 /**

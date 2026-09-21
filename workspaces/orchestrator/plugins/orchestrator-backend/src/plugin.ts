@@ -58,6 +58,13 @@ export const orchestratorPlugin = createBackendPlugin({
         }
         return registeredProviderTokenGrantResolver.getAccessToken(options);
       },
+      async resolveProviderTokenGrant(options) {
+        return registeredProviderTokenGrantResolver?.resolveProviderTokenGrant
+          ? registeredProviderTokenGrantResolver.resolveProviderTokenGrant(
+              options,
+            )
+          : undefined;
+      },
     };
 
     env.registerExtensionPoint(workflowLogsExtensionEndpoint, {
