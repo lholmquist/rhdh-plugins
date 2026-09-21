@@ -6,7 +6,7 @@
 import type { DiscoveryApi, FetchApi } from '@backstage/core-plugin-api';
 import { SecureTokenStorageClient } from './SecureTokenStorageClient';
 
-describe('SecureTokenStorageClient', () => {
+describe('SecureTokenStorageClient frontend plugin client', () => {
   const baseUrl = 'http://localhost:7007/api/secure-token-storage';
 
   const discoveryApi = {

@@ -13,6 +13,7 @@
     "role": "backend-plugin",
     "pluginId": "secure-token-storage",
     "pluginPackages": [
+      "@red-hat-developer-hub/backstage-plugin-secure-token-storage",
       "@red-hat-developer-hub/backstage-plugin-secure-token-storage-node",
       "@red-hat-developer-hub/backstage-plugin-secure-token-storage-backend"
     ]

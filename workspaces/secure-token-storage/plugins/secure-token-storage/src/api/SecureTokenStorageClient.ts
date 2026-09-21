@@ -26,6 +26,7 @@ export interface ProviderConnectionStart {
   expiresAt: string;
 }
 
+/** Client for the secure token storage backend endpoints used by the page. */
 export class SecureTokenStorageClient {
   constructor(
     private readonly options: {
