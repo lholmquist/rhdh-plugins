@@ -1,78 +1,111 @@
 # Secure token storage
 
-This workspace contains the standalone secure token storage foundation for
-Red Hat Developer Hub.
+This workspace contains the secure token storage plugins and a full-stack
+Backstage test host for Red Hat Developer Hub.
 
-The first implementation slice provides:
+Secure token storage is opt-in. When enabled, it lets a user connect an OAuth
+provider and approve an opaque, caller-bound grant that a trusted service or
+workflow can exchange for a usable provider access token. Provider tokens are
+encrypted at rest and are never placed in workflow input or sent to the
+browser.
+
+## Capabilities
+
+The workspace currently provides:
 
 - a root-scoped service contract in `secure-token-storage-node`;
 - a feature-gated backend plugin and service factory;
-- a local backend host with an unauthenticated health endpoint at
+- an unauthenticated health endpoint at
   `/api/secure-token-storage/health`;
 - AES-256-GCM encrypted provider connection persistence with key-version
   rotation support;
-- persistent PKCE OAuth connect sessions with exact redirect allowlists; and
-- user-approved caller-bound grants, grant listing and revocation, provider
-  disconnect, and service-authenticated access token retrieval at
-  `/api/secure-token-storage/token`; and
-- safe audit events for grant lifecycle, token use and refresh, consent
-  decisions, denials, and provider disconnects.
+- GitHub and Microsoft OAuth adapters with PKCE authorization-code exchange
+  and access-token refresh;
+- persistent, single-use OAuth connection sessions with exact redirect URI
+  allowlists;
+- user-approved, caller-bound grants with listing, refresh, revocation, and
+  provider disconnect operations;
+- service-authenticated token retrieval at
+  `/api/secure-token-storage/token`;
+- safe audit events for connection, consent, grant, token-use, refresh,
+  denial, and disconnect activity;
+- a provider connections and consent page in the sample frontend; and
+- an Orchestrator backend module that forwards explicit grants or resolves an
+  active grant for the initiating user before invoking a workflow.
 
-The implementation deliberately does not expose raw token intake over HTTP:
-GitHub and Microsoft adapters exchange one-time authorization codes and the
-callback stores the resulting credentials through the service boundary. Enabled
-deployments must configure
-`secureTokenStorage.allowedCallerSubjects`, an exact
-`secureTokenStorage.oauth.allowedRedirectUris` allowlist, and a secret-backed
-`secureTokenStorage.encryption.activeKey`.
+The backend deliberately does not expose raw token intake over HTTP. Provider
+adapters exchange one-time authorization codes and store the resulting
+credentials through the internal service boundary.
 
-Configure provider credentials only through secret-backed configuration:
+## Configuration essentials
+
+An enabled deployment must configure:
+
+- `secureTokenStorage.enabled: true`;
+- one or more secret-backed OAuth providers;
+- `secureTokenStorage.allowedCallerSubjects`;
+- an exact `secureTokenStorage.oauth.allowedRedirectUris` allowlist; and
+- a secret-backed, base64-encoded 32-byte
+  `secureTokenStorage.encryption.activeKey`.
+
+For example:
 
 ```yaml
 secureTokenStorage:
+  enabled: true
+  allowedCallerSubjects:
+    - sonataflow
   oauth:
     providers:
       github:
-        clientId: ${GITHUB_OAUTH_CLIENT_ID}
-        clientSecret: ${GITHUB_OAUTH_CLIENT_SECRET}
+        clientId: ${GITHUB_CLIENT_ID}
+        clientSecret: ${GITHUB_CLIENT_SECRET}
       microsoft:
         clientId: ${MICROSOFT_OAUTH_CLIENT_ID}
         clientSecret: ${MICROSOFT_OAUTH_CLIENT_SECRET}
         tenant: ${MICROSOFT_OAUTH_TENANT}
+    allowedRedirectUris:
+      - https://backstage.example.com/api/secure-token-storage/connections/github/callback
+      - https://backstage.example.com/api/secure-token-storage/connections/microsoft/callback
+  encryption:
+    activeKey: ${SECURE_TOKEN_STORAGE_ENCRYPTION_KEY}
 ```
+
+The caller subject resolved from a Backstage service credential must appear in
+`allowedCallerSubjects`. Use a persistent production database and a managed
+secret for the encryption key outside local development.
 
 ## Local test host
 
-The workspace includes a small full-stack Backstage host under `packages/`.
-Install dependencies with native build scripts enabled, then start the backend
-and frontend in separate terminals:
+The `packages/` directory contains a Backstage frontend and backend configured
+with secure token storage, GitHub sign-in, the local catalog entities, and the
+Orchestrator plugins. The sample database is in-memory, so restarting the
+backend removes its connections and grants.
+
+After installing repository dependencies, the shortest startup path is:
 
 ```bash
-YARN_ENABLE_SCRIPTS=true yarn install
-export SECURE_TOKEN_STORAGE_ENCRYPTION_KEY="$(node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))")"
-yarn workspace backend start --config ../../app-config.yaml
-yarn workspace app start
+cd /Users/lholmqui/develop/redhat-developer/rhdh-plugins/workspaces/secure-token-storage
+
+export GITHUB_CLIENT_ID='<client-id>'
+export GITHUB_CLIENT_SECRET='<client-secret>'
+export SECURE_TOKEN_STORAGE_ENCRYPTION_KEY="$(
+  node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"
+)"
+
+podman machine start
+yarn dev
 ```
 
-The backend exposes the broker at `/api/secure-token-storage`; the main OAuth
-route families are `/connections/:provider/start`,
-`/connections/:provider/callback`, and `/connections/:sessionId/consent`.
-Authenticated users can inspect `/grants`, revoke an individual grant, or
-disconnect a provider. The unauthenticated health check is
-`/api/secure-token-storage/health`. The local configuration uses an in-memory
-SQLite database and must not be reused as a production configuration. The
-local host does not register a provider adapter unless these provider settings
-are supplied.
+The frontend runs at [http://localhost:3000](http://localhost:3000), the
+backend at [http://localhost:7007](http://localhost:7007), and the Provider
+connections page at
+[http://localhost:3000/secure-token-storage](http://localhost:3000/secure-token-storage).
 
-The sample host also includes the Orchestrator frontend and backend setup. Its
-Podman configuration starts a local SonataFlow dev-mode container, clones the
-sample workflow repository into `packages/backend/.devModeTemp`, and uses
-`host.containers.internal` for SonataFlow notification callbacks. Kafka is not
-configured, so event-based workflow execution is intentionally disabled.
+For dependency installation, OAuth callback setup, GitHub connection and
+consent, grant testing, automatic token refresh, and both direct and
+Orchestrator UI workflow tests, follow the
+[local testing guide](./LOCAL_TESTING.md).
 
-Run the backend with Podman available on the host:
-
-```bash
-SECURE_TOKEN_STORAGE_ENCRYPTION_KEY="$(node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))")" \
-  yarn workspace backend start --config ../../app-config.yaml
-```
+The local `app-config.yaml` and its static service credential are for
+development only and must not be reused in a shared or production deployment.
