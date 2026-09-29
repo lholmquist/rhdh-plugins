@@ -7,6 +7,7 @@ import { AnyRouteRefParams } from '@backstage/frontend-plugin-api';
 import { ConfigurableExtensionDataRef } from '@backstage/frontend-plugin-api';
 import { ExtensionDataRef } from '@backstage/frontend-plugin-api';
 import { ExtensionInput } from '@backstage/frontend-plugin-api';
+import { FrontendModule } from '@backstage/frontend-plugin-api';
 import { IconElement } from '@backstage/frontend-plugin-api';
 import { JSX as JSX_2 } from 'react';
 import { OverridableExtensionDefinition } from '@backstage/frontend-plugin-api';
@@ -32,6 +33,7 @@ const secureTokenStoragePlugin: OverridableFrontendPlugin<
         title?: string | undefined;
       };
       output:
+        | ExtensionDataRef<JSX_2.Element, 'core.reactElement', {}>
         | ExtensionDataRef<string, 'core.routing.path', {}>
         | ExtensionDataRef<
             RouteRef<AnyRouteRefParams>,
@@ -40,7 +42,6 @@ const secureTokenStoragePlugin: OverridableFrontendPlugin<
               optional: true;
             }
           >
-        | ExtensionDataRef<JSX_2.Element, 'core.reactElement', {}>
         | ExtensionDataRef<
             string,
             'core.title',
@@ -100,6 +101,9 @@ const secureTokenStoragePlugin: OverridableFrontendPlugin<
 >;
 export default secureTokenStoragePlugin;
 export { secureTokenStoragePlugin };
+
+// @public
+export const secureTokenStorageSettingsModule: FrontendModule;
 
 // (No @packageDocumentation comment for this package)
 ```

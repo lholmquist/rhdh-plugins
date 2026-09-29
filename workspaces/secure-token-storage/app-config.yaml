@@ -75,7 +75,7 @@ orchestrator:
   sonataFlowService:
     runtime: podman
     baseUrl: http://localhost
-    port: 8899
+    port: 8080
     autoStart: true
     # This is a local development-only value, matching the upstream example.
     notificationsBearerToken: bXljdXJscGFzc3dkCg== # NOSONAR
@@ -85,14 +85,14 @@ orchestrator:
       gitRepositoryUrl: https://github.com/rhdhorchestrator/backstage-orchestrator-workflows.git
       localPath: ./.devModeTemp/repository
   dataIndexService:
-    url: http://localhost:8899
+    url: http://localhost:8080
 
 secureTokenStorage:
   enabled: true
   allowedCallerSubjects:
     - sonataflow
   oauth:
-    consentUrl: http://localhost:3000/secure-token-storage
+    consentUrl: http://localhost:3000/settings/auth-providers
     userConnection:
       callerSubject: sonataflow
       redirectUri: http://localhost:7007/api/secure-token-storage/connections/github/callback

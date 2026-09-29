@@ -19,6 +19,7 @@ import {
   type CreateTokenGrantInput,
   type ProviderDisconnectResult,
   type SecureTokenStorageErrorCode,
+  type SecureTokenStorageProviderStatus,
   type StoreProviderTokenInput,
   type SecureTokenStorageService,
   type SecureTokenStorageStatus,
@@ -293,6 +294,68 @@ export class DefaultSecureTokenStorageService
       options.provider,
     );
     return grants.map(toTokenGrant);
+  }
+
+  async listProviders(options: {
+    userEntityRef: string;
+  }): Promise<SecureTokenStorageProviderStatus[]> {
+    this.assertReady();
+    const [connections, grants] = await Promise.all([
+      this.repository!.listConnectionsForUser(options.userEntityRef),
+      this.repository!.listGrants(options.userEntityRef),
+    ]);
+    const connectionsByProvider = new Map(
+      connections.map(connection => [connection.provider, connection]),
+    );
+    const grantsByProvider = new Map<string, StoredGrant[]>();
+    for (const grant of grants) {
+      const providerGrants = grantsByProvider.get(grant.provider) ?? [];
+      providerGrants.push(grant);
+      grantsByProvider.set(grant.provider, providerGrants);
+    }
+
+    const providerIds = new Set([
+      ...this.oauthAdapters.keys(),
+      ...connectionsByProvider.keys(),
+      ...grantsByProvider.keys(),
+    ]);
+    const now = this.now();
+
+    return [...providerIds].sort().map(provider => {
+      const connection = connectionsByProvider.get(provider);
+      const providerGrants = grantsByProvider.get(provider) ?? [];
+      const configured = this.oauthAdapters.has(provider);
+      const connected = Boolean(connection && !connection.revokedAt);
+      const accessTokenExpired = Boolean(
+        connection?.accessTokenExpiresAt &&
+          connection.accessTokenExpiresAt <= now,
+      );
+      const canRefresh = Boolean(
+        connection?.hasRefreshToken && this.refreshers.has(provider),
+      );
+      const hasUnexpiredGrant = providerGrants.some(
+        grant => !grant.revokedAt && grant.expiresAt > now,
+      );
+
+      return {
+        provider,
+        configured,
+        connected,
+        scopes: connection?.scopes ?? [],
+        accessTokenExpiresAt: connection?.accessTokenExpiresAt,
+        reconnectRequired:
+          (connected && (!configured || (accessTokenExpired && !canRefresh))) ||
+          (!connected && hasUnexpiredGrant),
+        grants: providerGrants.map(grant => ({
+          grantId: grant.id,
+          provider: grant.provider,
+          scopes: grant.scopes,
+          createdAt: grant.createdAt,
+          expiresAt: grant.expiresAt,
+          revokedAt: grant.revokedAt,
+        })),
+      };
+    });
   }
 
   async disconnectProvider(options: {

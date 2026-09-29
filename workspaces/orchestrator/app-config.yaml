@@ -202,7 +202,7 @@ orchestrator:
     # messageKey: messageKey
   sonataFlowService:
     # uncomment the next line to use podman instead of docker
-    # runtime: podman
+    runtime: podman
     baseUrl: http://localhost
     port: 8899
     autoStart: true
@@ -212,9 +212,9 @@ orchestrator:
     # container:  registry.redhat.io/openshift-serverless-1/logic-swf-devmode-rhel8:1.36.0
     # notsecret
     notificationsBearerToken: bXljdXJscGFzc3dkCg== # NOSONAR
-    notificationsUrl: http://host.docker.internal:7007
+    # notificationsUrl: http://host.docker.internal:7007
     # uncomment the next line if you are using podman:
-    # notificationsUrl: http://host.containers.internal:7007
+    notificationsUrl: http://host.containers.internal:7007
     # By default the Dev Mode workflows are Ephemeral. If you want to persist the data across restarts,
     # uncomment the next two lines, read more: https://www.rhdhorchestrator.io/blog/devmode-vs-prodmode/
     # persistence:

@@ -4,7 +4,10 @@
  * Licensed under the Apache License, Version 2.0 (the "License");
  */
 import type { DiscoveryApi, FetchApi } from '@backstage/core-plugin-api';
-import { SecureTokenStorageClient } from './SecureTokenStorageClient';
+import {
+  SecureTokenStorageApiError,
+  SecureTokenStorageClient,
+} from './SecureTokenStorageClient';
 
 describe('SecureTokenStorageClient frontend plugin client', () => {
   const baseUrl = 'http://localhost:7007/api/secure-token-storage';
@@ -46,6 +49,24 @@ describe('SecureTokenStorageClient frontend plugin client', () => {
     );
     expect(fetch.mock.calls[0][1].body).not.toContain('accessToken');
     expect(fetch.mock.calls[0][1].body).not.toContain('refreshToken');
+  });
+
+  it('preserves safe backend error codes for consent recovery', async () => {
+    const fetch = jest.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: 'connect-session-expired' }), {
+        status: 410,
+      }),
+    );
+    const client = new SecureTokenStorageClient({
+      discoveryApi,
+      fetchApi: { fetch } as FetchApi,
+    });
+
+    await expect(client.approveConnection('session-1')).rejects.toMatchObject({
+      constructor: SecureTokenStorageApiError,
+      status: 410,
+      code: 'connect-session-expired',
+    });
   });
 
   it('starts a browser connection and returns the provider authorization URL', async () => {
@@ -101,6 +122,55 @@ describe('SecureTokenStorageClient frontend plugin client', () => {
       `${baseUrl}/grants/grant-1/revoke`,
       expect.objectContaining({ method: 'POST' }),
     );
+  });
+
+  it('loads configured provider and grant status from the backend read model', async () => {
+    const providers = [
+      {
+        provider: 'microsoft',
+        configured: true,
+        connected: true,
+        scopes: ['User.Read'],
+        accessTokenExpiresAt: '2026-09-07T13:00:00.000Z',
+        reconnectRequired: false,
+        grants: [
+          {
+            grantId: 'grant-1',
+            provider: 'microsoft',
+            scopes: ['User.Read'],
+            createdAt: '2026-09-07T12:00:00.000Z',
+            expiresAt: '2026-09-08T12:00:00.000Z',
+          },
+        ],
+      },
+    ];
+    const fetch = jest
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify(providers), { status: 200 }),
+      );
+    const client = new SecureTokenStorageClient({
+      discoveryApi,
+      fetchApi: { fetch } as FetchApi,
+    });
+
+    await expect(client.listProviders()).resolves.toEqual(providers);
+    expect(fetch).toHaveBeenCalledWith(`${baseUrl}/providers`, undefined);
+  });
+
+  it('reports whether the secure-token-storage backend is enabled', async () => {
+    const fetch = jest
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ enabled: true }), { status: 200 }),
+      );
+    const client = new SecureTokenStorageClient({
+      discoveryApi,
+      fetchApi: { fetch } as FetchApi,
+    });
+
+    await expect(client.getStatus()).resolves.toEqual({ enabled: true });
+    expect(fetch).toHaveBeenCalledWith(`${baseUrl}/health`, undefined);
   });
 
   it('refreshes a selected grant', async () => {

@@ -6377,6 +6377,7 @@ __metadata:
     "@backstage/core-plugin-api": "npm:^1.12.9"
     "@backstage/frontend-defaults": "npm:^0.5.5"
     "@backstage/frontend-plugin-api": "npm:^0.18.0"
+    "@backstage/plugin-user-settings": "npm:^0.9.6"
     "@mui/icons-material": "npm:5.18.0"
     "@mui/material": "npm:5.18.0"
     "@types/react": "npm:^18"
