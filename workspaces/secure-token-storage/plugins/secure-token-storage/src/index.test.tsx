@@ -16,13 +16,27 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import secureTokenStoragePlugin from './index';
+import secureTokenStoragePlugin, {
+  secureTokenStorageSettingsModule,
+} from './index';
 
 describe('secure-token-storage frontend plugin', () => {
   it('registers the secure-token-storage page extension', () => {
     expect(
       secureTokenStoragePlugin.getExtension('page:secure-token-storage'),
     ).toBeDefined();
+  });
+
+  it('registers an extension for the Settings Authentication Providers slot', () => {
+    const source = readFileSync(
+      resolve(__dirname, 'settingsModule.tsx'),
+      'utf8',
+    );
+
+    expect(secureTokenStorageSettingsModule).toBeDefined();
+    expect(source).toMatch(
+      /kind:\s*'provider-settings'[\s\S]*?attachTo:\s*\{[\s\S]*?id:\s*'sub-page:user-settings\/auth-providers'[\s\S]*?input:\s*'providerSettings'/,
+    );
   });
 
   it('declares an icon so the page is discoverable in app navigation', () => {

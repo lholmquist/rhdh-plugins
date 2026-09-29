@@ -22,6 +22,15 @@ export interface StoredConnection {
   revokedAt?: Date;
 }
 
+/** Connection metadata that deliberately excludes encrypted token material. */
+export interface StoredConnectionStatus {
+  provider: string;
+  scopes: string[];
+  accessTokenExpiresAt?: Date;
+  revokedAt?: Date;
+  hasRefreshToken: boolean;
+}
+
 export interface StoredGrant {
   id: string;
   userEntityRef: string;
@@ -95,6 +104,14 @@ type ConnectionRow = {
   updated_at: Date | string;
   last_used_at?: Date | string;
   revoked_at?: Date | string;
+};
+
+type ConnectionStatusRow = {
+  provider: string;
+  scopes_json: string;
+  access_token_expires_at?: Date | string;
+  revoked_at?: Date | string;
+  has_refresh_token: number | boolean;
 };
 
 type GrantRow = {
@@ -203,6 +220,34 @@ const fromConnectSessionRow = (
 /** @internal */
 export class TokenStorageRepository {
   constructor(private readonly database: DatabaseClient) {}
+
+  async listConnectionsForUser(
+    userEntityRef: string,
+  ): Promise<StoredConnectionStatus[]> {
+    const rows = await this.database('secure_token_storage_connections')
+      .select<ConnectionStatusRow[]>(
+        'provider',
+        'scopes_json',
+        'access_token_expires_at',
+        'revoked_at',
+      )
+      .select(
+        this.database.raw('CASE WHEN ?? IS NOT NULL THEN 1 ELSE 0 END AS ??', [
+          'refresh_token_ciphertext',
+          'has_refresh_token',
+        ]),
+      )
+      .where({ user_entity_ref: userEntityRef })
+      .orderBy('provider');
+
+    return rows.map(row => ({
+      provider: row.provider,
+      scopes: JSON.parse(row.scopes_json) as string[],
+      accessTokenExpiresAt: asDate(row.access_token_expires_at),
+      revokedAt: asDate(row.revoked_at),
+      hasRefreshToken: Boolean(row.has_refresh_token),
+    }));
+  }
 
   async upsertConnection(connection: StoredConnection): Promise<void> {
     const row = {

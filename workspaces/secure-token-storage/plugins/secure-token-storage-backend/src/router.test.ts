@@ -12,7 +12,10 @@ import type {
   HttpAuthService,
   LoggerService,
 } from '@backstage/backend-plugin-api';
-import type { SecureTokenStorageService } from '@red-hat-developer-hub/backstage-plugin-secure-token-storage-node';
+import {
+  SecureTokenStorageError,
+  type SecureTokenStorageService,
+} from '@red-hat-developer-hub/backstage-plugin-secure-token-storage-node';
 import { createRouter } from './router';
 
 const userCredentials = (
@@ -223,7 +226,7 @@ describe('secure token storage router', () => {
       await createRouter({
         httpAuth,
         service,
-        consentUrl: 'http://localhost:3000/secure-token-storage',
+        consentUrl: 'http://localhost:3000/settings/auth-providers',
       }),
     );
 
@@ -232,13 +235,55 @@ describe('secure token storage router', () => {
       .query({ state: 'one-time-state', code: 'one-time-code' })
       .expect(303);
 
-    expect(response.headers.location).toMatch(
-      /http:\/\/localhost:3000\/secure-token-storage/,
+    const consentUrl = new URL(response.headers.location);
+    expect(`${consentUrl.origin}${consentUrl.pathname}`).toBe(
+      'http://localhost:3000/settings/auth-providers',
     );
-    expect(response.headers.location).toMatch(/sessionId=session-1/);
-    expect(response.headers.location).toMatch(/provider=github/);
-    expect(response.headers.location).toMatch(/scopes=repo%2Cread%3Auser/);
+    expect(consentUrl.searchParams.get('sessionId')).toBe('session-1');
+    expect(consentUrl.searchParams.get('provider')).toBe('github');
+    expect(consentUrl.searchParams.get('scopes')).toBe('repo,read:user');
   });
+
+  it.each([
+    ['connect-session-expired', { state: 'one-time-state', code: 'code' }],
+    ['connect-session-consumed', { state: 'one-time-state', code: 'code' }],
+    [
+      'oauth-consent-denied',
+      { state: 'one-time-state', error: 'access_denied' },
+    ],
+  ] as const)(
+    'redirects %s OAuth callback errors to Settings for recovery',
+    async (errorCode, callbackQuery) => {
+      const httpAuth = {
+        credentials: jest.fn(),
+      } as unknown as jest.Mocked<HttpAuthService>;
+      const service = {
+        completeProviderConnection: jest
+          .fn()
+          .mockRejectedValue(new SecureTokenStorageError(errorCode)),
+      } as unknown as jest.Mocked<SecureTokenStorageService>;
+      const app = express();
+      app.use(
+        '/api/secure-token-storage',
+        await createRouter({
+          httpAuth,
+          service,
+          consentUrl: 'http://localhost:3000/settings/auth-providers',
+        }),
+      );
+
+      const response = await request(app)
+        .get('/api/secure-token-storage/connections/github/callback')
+        .query(callbackQuery)
+        .expect(303);
+
+      const consentUrl = new URL(response.headers.location);
+      expect(consentUrl.pathname).toBe('/settings/auth-providers');
+      expect(consentUrl.searchParams.get('provider')).toBe('github');
+      expect(consentUrl.searchParams.get('connectionError')).toBe(errorCode);
+      expect(consentUrl.searchParams.has('sessionId')).toBe(false);
+    },
+  );
 
   it('uses the authenticated user for consent and does not accept a caller subject', async () => {
     const httpAuth = {
@@ -304,6 +349,76 @@ describe('secure token storage router', () => {
       userEntityRef: 'user:default/luke',
       provider: 'github',
     });
+  });
+
+  it('returns token-free provider status for the authenticated user', async () => {
+    const httpAuth = {
+      credentials: jest.fn().mockResolvedValue(userCredentials()),
+    } as unknown as jest.Mocked<HttpAuthService>;
+    const service = {
+      listProviders: jest.fn().mockResolvedValue([
+        {
+          provider: 'github',
+          configured: true,
+          connected: true,
+          scopes: ['repo'],
+          accessTokenExpiresAt: new Date('2026-09-07T13:00:00Z'),
+          reconnectRequired: false,
+          grants: [
+            {
+              grantId: 'grant-1',
+              provider: 'github',
+              scopes: ['repo'],
+              createdAt: new Date('2026-09-07T12:00:00Z'),
+              expiresAt: new Date('2026-09-08T12:00:00Z'),
+            },
+          ],
+        },
+      ]),
+    } as unknown as jest.Mocked<SecureTokenStorageService>;
+    const app = express();
+    app.use(
+      '/api/secure-token-storage',
+      await createRouter({ httpAuth, service }),
+    );
+
+    const response = await request(app)
+      .get('/api/secure-token-storage/providers')
+      .expect(200);
+
+    expect(response.body).toEqual([
+      {
+        provider: 'github',
+        configured: true,
+        connected: true,
+        scopes: ['repo'],
+        accessTokenExpiresAt: '2026-09-07T13:00:00.000Z',
+        reconnectRequired: false,
+        grants: [
+          {
+            grantId: 'grant-1',
+            provider: 'github',
+            scopes: ['repo'],
+            createdAt: '2026-09-07T12:00:00.000Z',
+            expiresAt: '2026-09-08T12:00:00.000Z',
+          },
+        ],
+      },
+    ]);
+    expect(service.listProviders).toHaveBeenCalledWith({
+      userEntityRef: 'user:default/luke',
+    });
+    expect(httpAuth.credentials).toHaveBeenCalledWith(expect.anything(), {
+      allow: ['user'],
+    });
+    expect(response.body[0]).not.toHaveProperty('accessToken');
+    expect(response.body[0]).not.toHaveProperty('refreshToken');
+    expect(JSON.stringify(response.body)).not.toContain(
+      'provider-access-token',
+    );
+    expect(JSON.stringify(response.body)).not.toContain(
+      'provider-refresh-token',
+    );
   });
 
   it('disconnects a provider for the authenticated user', async () => {

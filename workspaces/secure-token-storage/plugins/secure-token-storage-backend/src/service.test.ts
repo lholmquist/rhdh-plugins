@@ -26,6 +26,7 @@ const caller = (
 function createRepository() {
   return {
     findConnection: jest.fn(),
+    listConnectionsForUser: jest.fn(),
     upsertConnection: jest.fn(),
     createGrant: jest.fn(),
     findGrant: jest.fn(),
@@ -464,6 +465,158 @@ describe('DefaultSecureTokenStorageService', () => {
         metadata: { revokedGrantCount: 1 },
       }),
     );
+  });
+
+  it('lists token-free status for configured and previously connected providers', async () => {
+    const repository = createRepository();
+    const now = new Date('2026-09-07T12:00:00Z');
+    repository.listConnectionsForUser.mockResolvedValue([
+      {
+        provider: 'github',
+        scopes: ['repo'],
+        accessTokenExpiresAt: new Date('2026-09-07T11:00:00Z'),
+        hasRefreshToken: true,
+      },
+      {
+        provider: 'microsoft',
+        scopes: ['User.Read'],
+        accessTokenExpiresAt: new Date('2026-09-07T11:00:00Z'),
+        hasRefreshToken: false,
+      },
+      {
+        provider: 'legacy-provider',
+        scopes: ['read'],
+        hasRefreshToken: true,
+      },
+    ]);
+    repository.listGrants.mockResolvedValue([
+      {
+        id: 'grant-github',
+        userEntityRef: 'user:default/luke',
+        callerSubject: 'sonataflow',
+        provider: 'github',
+        scopes: ['repo'],
+        createdAt: new Date('2026-09-07T10:30:00Z'),
+        expiresAt: new Date('2026-09-08T12:00:00Z'),
+      },
+      {
+        id: 'grant-microsoft',
+        userEntityRef: 'user:default/luke',
+        callerSubject: 'sonataflow',
+        provider: 'microsoft',
+        scopes: ['User.Read'],
+        createdAt: new Date('2026-09-07T10:30:00Z'),
+        expiresAt: new Date('2026-09-08T12:00:00Z'),
+      },
+      {
+        id: 'grant-legacy',
+        userEntityRef: 'user:default/luke',
+        callerSubject: 'sonataflow',
+        provider: 'legacy-provider',
+        scopes: ['read'],
+        createdAt: new Date('2026-09-07T10:30:00Z'),
+        expiresAt: new Date('2026-09-08T12:00:00Z'),
+        revokedAt: new Date('2026-09-07T11:00:00Z'),
+      },
+    ]);
+    const service = new DefaultSecureTokenStorageService(true, {
+      repository,
+      cipher: createTokenCipher({ activeKey: key, activeKeyVersion: 'v1' }),
+      now: () => now,
+      oauthAdapters: new Map([
+        ['github', {} as ProviderOAuthAdapter],
+        ['microsoft', {} as ProviderOAuthAdapter],
+      ]),
+      refreshers: new Map([['github', { refresh: jest.fn() }]]),
+    });
+
+    await expect(
+      service.listProviders({ userEntityRef: 'user:default/luke' }),
+    ).resolves.toEqual([
+      {
+        provider: 'github',
+        configured: true,
+        connected: true,
+        scopes: ['repo'],
+        accessTokenExpiresAt: new Date('2026-09-07T11:00:00Z'),
+        reconnectRequired: false,
+        grants: [
+          {
+            grantId: 'grant-github',
+            provider: 'github',
+            scopes: ['repo'],
+            createdAt: new Date('2026-09-07T10:30:00Z'),
+            expiresAt: new Date('2026-09-08T12:00:00Z'),
+            revokedAt: undefined,
+          },
+        ],
+      },
+      {
+        provider: 'legacy-provider',
+        configured: false,
+        connected: true,
+        scopes: ['read'],
+        accessTokenExpiresAt: undefined,
+        reconnectRequired: true,
+        grants: [
+          {
+            grantId: 'grant-legacy',
+            provider: 'legacy-provider',
+            scopes: ['read'],
+            createdAt: new Date('2026-09-07T10:30:00Z'),
+            expiresAt: new Date('2026-09-08T12:00:00Z'),
+            revokedAt: new Date('2026-09-07T11:00:00Z'),
+          },
+        ],
+      },
+      {
+        provider: 'microsoft',
+        configured: true,
+        connected: true,
+        scopes: ['User.Read'],
+        accessTokenExpiresAt: new Date('2026-09-07T11:00:00Z'),
+        reconnectRequired: true,
+        grants: [
+          {
+            grantId: 'grant-microsoft',
+            provider: 'microsoft',
+            scopes: ['User.Read'],
+            createdAt: new Date('2026-09-07T10:30:00Z'),
+            expiresAt: new Date('2026-09-08T12:00:00Z'),
+            revokedAt: undefined,
+          },
+        ],
+      },
+    ]);
+    expect(repository.listConnectionsForUser).toHaveBeenCalledWith(
+      'user:default/luke',
+    );
+    expect(repository.listGrants).toHaveBeenCalledWith('user:default/luke');
+  });
+
+  it('includes configured providers that the user has not connected yet', async () => {
+    const repository = createRepository();
+    repository.listConnectionsForUser.mockResolvedValue([]);
+    repository.listGrants.mockResolvedValue([]);
+    const service = new DefaultSecureTokenStorageService(true, {
+      repository,
+      cipher: createTokenCipher({ activeKey: key, activeKeyVersion: 'v1' }),
+      oauthAdapters: new Map([['github', {} as ProviderOAuthAdapter]]),
+    });
+
+    await expect(
+      service.listProviders({ userEntityRef: 'user:default/luke' }),
+    ).resolves.toEqual([
+      {
+        provider: 'github',
+        configured: true,
+        connected: false,
+        scopes: [],
+        accessTokenExpiresAt: undefined,
+        reconnectRequired: false,
+        grants: [],
+      },
+    ]);
   });
 
   it('refreshes an expired user grant without changing its grant ID', async () => {

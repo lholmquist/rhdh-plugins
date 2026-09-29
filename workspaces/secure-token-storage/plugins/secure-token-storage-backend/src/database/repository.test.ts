@@ -180,4 +180,59 @@ describe('TokenStorageRepository', () => {
       repository.findConnection('user:default/luke', 'github'),
     ).resolves.toMatchObject({ revokedAt: undefined });
   });
+
+  it('lists user connection metadata without returning encrypted token values', async () => {
+    const repository = new TokenStorageRepository(database as never);
+    await database('secure_token_storage_connections').insert([
+      {
+        id: 'connection-1',
+        user_entity_ref: 'user:default/luke',
+        provider: 'github',
+        access_token_ciphertext: 'encrypted-access-secret',
+        access_token_iv: 'access-iv',
+        access_token_auth_tag: 'access-tag',
+        access_token_key_version: 'v1',
+        refresh_token_ciphertext: 'encrypted-refresh-secret',
+        refresh_token_iv: 'refresh-iv',
+        refresh_token_auth_tag: 'refresh-tag',
+        refresh_token_key_version: 'v1',
+        access_token_expires_at: new Date('2026-09-07T13:00:00Z'),
+        scopes_json: JSON.stringify(['repo', 'read:user']),
+        created_at: new Date('2026-09-07T12:00:00Z'),
+        updated_at: new Date('2026-09-07T12:00:00Z'),
+      },
+      {
+        id: 'connection-2',
+        user_entity_ref: 'user:default/other',
+        provider: 'microsoft',
+        access_token_ciphertext: 'other-access',
+        access_token_iv: 'other-iv',
+        access_token_auth_tag: 'other-tag',
+        access_token_key_version: 'v1',
+        scopes_json: JSON.stringify(['User.Read']),
+        created_at: new Date('2026-09-07T12:00:00Z'),
+        updated_at: new Date('2026-09-07T12:00:00Z'),
+      },
+    ]);
+
+    const connections = await repository.listConnectionsForUser(
+      'user:default/luke',
+    );
+
+    expect(connections).toEqual([
+      {
+        provider: 'github',
+        scopes: ['repo', 'read:user'],
+        accessTokenExpiresAt: new Date('2026-09-07T13:00:00Z'),
+        revokedAt: undefined,
+        hasRefreshToken: true,
+      },
+    ]);
+    expect(JSON.stringify(connections)).not.toContain(
+      'encrypted-access-secret',
+    );
+    expect(JSON.stringify(connections)).not.toContain(
+      'encrypted-refresh-secret',
+    );
+  });
 });

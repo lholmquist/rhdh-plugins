@@ -71,6 +71,22 @@ function queryString(value: unknown): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
+function isRecoverableCallbackError(
+  error: unknown,
+): error is SecureTokenStorageError {
+  return (
+    error instanceof SecureTokenStorageError &&
+    [
+      'connect-session-not-found',
+      'connect-session-expired',
+      'connect-session-consumed',
+      'oauth-consent-denied',
+      'oauth-exchange-failed',
+      'provider-not-configured',
+    ].includes(error.code)
+  );
+}
+
 export async function createRouter(options: {
   httpAuth: HttpAuthService;
   logger?: LoggerService;
@@ -87,6 +103,21 @@ export async function createRouter(options: {
 
   router.get('/health', async (_request, response) => {
     response.json(await options.service.getStatus());
+  });
+
+  router.get('/providers', async (request, response) => {
+    try {
+      const credentials = await options.httpAuth.credentials(request, {
+        allow: ['user'],
+      });
+      response.json(
+        await options.service.listProviders({
+          userEntityRef: credentials.principal.userEntityRef,
+        }),
+      );
+    } catch (error) {
+      sendSafeError(response, error);
+    }
   });
 
   router.post('/connections/:provider/start', async (request, response) => {
@@ -175,6 +206,7 @@ export async function createRouter(options: {
 
       if (options.consentUrl) {
         const consentUrl = new URL(options.consentUrl);
+        consentUrl.searchParams.delete('connectionError');
         consentUrl.searchParams.set('sessionId', connection.sessionId);
         consentUrl.searchParams.set('provider', connection.provider);
         consentUrl.searchParams.set('scopes', connection.scopes.join(','));
@@ -184,6 +216,15 @@ export async function createRouter(options: {
 
       response.json({ status: 'connected', ...connection });
     } catch (error) {
+      if (options.consentUrl && isRecoverableCallbackError(error)) {
+        const consentUrl = new URL(options.consentUrl);
+        consentUrl.searchParams.delete('sessionId');
+        consentUrl.searchParams.delete('scopes');
+        consentUrl.searchParams.set('provider', request.params.provider);
+        consentUrl.searchParams.set('connectionError', error.code);
+        response.redirect(303, consentUrl.toString());
+        return;
+      }
       sendSafeError(response, error);
     }
   });

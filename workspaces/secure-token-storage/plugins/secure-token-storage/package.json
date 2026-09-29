@@ -47,6 +47,7 @@
   "dependencies": {
     "@backstage/core-plugin-api": "^1.12.9",
     "@backstage/frontend-plugin-api": "^0.18.0",
+    "@backstage/plugin-user-settings": "^0.9.6",
     "@mui/icons-material": "5.18.0",
     "@mui/material": "5.18.0"
   },
@@ -71,7 +72,8 @@
   "scalprum": {
     "name": "red-hat-developer-hub.backstage-plugin-secure-token-storage",
     "exposedModules": {
-      "PluginRoot": "./src/index.tsx"
+      "PluginRoot": "./src/index.tsx",
+      "SettingsModule": "./src/settingsModuleExport.tsx"
     }
   }
 }

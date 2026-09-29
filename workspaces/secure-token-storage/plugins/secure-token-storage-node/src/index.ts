@@ -136,6 +136,48 @@ export interface TokenGrant {
 }
 
 /**
+ * Safe summary of a grant included in a user's provider status.
+ *
+ * @public
+ */
+export interface SecureTokenStorageProviderGrant {
+  /** Opaque grant identifier. */
+  grantId: string;
+  /** Provider identifier. */
+  provider: string;
+  /** Scopes approved for this grant. */
+  scopes: string[];
+  /** Time at which the grant was created. */
+  createdAt: Date;
+  /** Time at which the grant expires. */
+  expiresAt: Date;
+  /** Time at which the grant was revoked, when applicable. */
+  revokedAt?: Date;
+}
+
+/**
+ * Token-free provider connection and grant status for an authenticated user.
+ *
+ * @public
+ */
+export interface SecureTokenStorageProviderStatus {
+  /** Provider identifier, for example `github` or `microsoft`. */
+  provider: string;
+  /** Whether OAuth is configured for this provider on the backend. */
+  configured: boolean;
+  /** Whether the user currently has an active stored provider connection. */
+  connected: boolean;
+  /** Scopes stored on the provider connection, when one exists. */
+  scopes: string[];
+  /** Expiry of the stored provider access token, when known. */
+  accessTokenExpiresAt?: Date;
+  /** Whether the connection needs user reauthorization before it can be used. */
+  reconnectRequired: boolean;
+  /** Safe grant summaries associated with this provider. */
+  grants: SecureTokenStorageProviderGrant[];
+}
+
+/**
  * Result of disconnecting a provider connection.
  *
  * @public
@@ -259,6 +301,14 @@ export interface SecureTokenStorageService {
     userEntityRef: string;
     provider?: string;
   }): Promise<TokenGrant[]>;
+  /**
+   * Lists configured provider and connection status for an authenticated user.
+   *
+   * @public
+   */
+  listProviders(options: {
+    userEntityRef: string;
+  }): Promise<SecureTokenStorageProviderStatus[]>;
   /** Disconnects a provider and revokes all of its user grants. */
   disconnectProvider(options: {
     userEntityRef: string;

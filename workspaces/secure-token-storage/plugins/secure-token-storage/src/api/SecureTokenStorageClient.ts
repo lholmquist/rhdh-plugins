@@ -9,8 +9,19 @@ export interface ProviderTokenGrant {
   grantId: string;
   provider: string;
   scopes: string[];
+  createdAt?: string;
   expiresAt: string;
   revokedAt?: string;
+}
+
+export interface SecureTokenStorageProviderStatus {
+  provider: string;
+  configured: boolean;
+  connected: boolean;
+  scopes: string[];
+  accessTokenExpiresAt?: string;
+  reconnectRequired: boolean;
+  grants: ProviderTokenGrant[];
 }
 
 export interface ProviderConnectionGrant {
@@ -26,6 +37,18 @@ export interface ProviderConnectionStart {
   expiresAt: string;
 }
 
+export interface SecureTokenStorageStatus {
+  enabled: boolean;
+}
+
+/** Error returned by the secure token storage API, including its safe code. */
+export class SecureTokenStorageApiError extends Error {
+  constructor(readonly status: number, readonly code?: string) {
+    super(`Secure token storage request failed (${status})`);
+    this.name = 'SecureTokenStorageApiError';
+  }
+}
+
 /** Client for the secure token storage backend endpoints used by the page. */
 export class SecureTokenStorageClient {
   constructor(
@@ -38,6 +61,14 @@ export class SecureTokenStorageClient {
   async listGrants(provider?: string): Promise<ProviderTokenGrant[]> {
     const query = provider ? `?provider=${encodeURIComponent(provider)}` : '';
     return this.request<ProviderTokenGrant[]>(`/grants${query}`);
+  }
+
+  async listProviders(): Promise<SecureTokenStorageProviderStatus[]> {
+    return this.request<SecureTokenStorageProviderStatus[]>('/providers');
+  }
+
+  async getStatus(): Promise<SecureTokenStorageStatus> {
+    return this.request<SecureTokenStorageStatus>('/health');
   }
 
   async approveConnection(
@@ -112,9 +143,14 @@ export class SecureTokenStorageClient {
     );
 
     if (!response.ok) {
-      throw new Error(
-        `Secure token storage request failed (${response.status})`,
-      );
+      let code: string | undefined;
+      try {
+        const body = (await response.json()) as { error?: unknown };
+        if (typeof body.error === 'string') code = body.error;
+      } catch {
+        // Error responses can come from a proxy and may not contain JSON.
+      }
+      throw new SecureTokenStorageApiError(response.status, code);
     }
 
     if (response.status === 204) {

@@ -51,3 +51,5 @@ const secureTokenStoragePlugin = createFrontendPlugin({
 
 export { secureTokenStoragePlugin };
 export default secureTokenStoragePlugin;
+
+export { secureTokenStorageSettingsModule } from './settingsModule';

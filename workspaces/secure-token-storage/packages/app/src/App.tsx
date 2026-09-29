@@ -19,7 +19,9 @@ import orchestratorPlugin, {
   orchestratorTranslationsModule,
 } from '@red-hat-developer-hub/backstage-plugin-orchestrator';
 import orchestratorFormWidgetsPlugin from '@red-hat-developer-hub/backstage-plugin-orchestrator-form-widgets';
-import secureTokenStoragePlugin from '@red-hat-developer-hub/backstage-plugin-secure-token-storage';
+import secureTokenStoragePlugin, {
+  secureTokenStorageSettingsModule,
+} from '@red-hat-developer-hub/backstage-plugin-secure-token-storage';
 import { rhdhThemeModule } from '@red-hat-developer-hub/backstage-plugin-theme/alpha';
 import { navModule } from './modules/nav';
 
@@ -60,5 +62,6 @@ export default createApp({
     orchestratorFormWidgetsPlugin,
     signInModule,
     secureTokenStoragePlugin,
+    secureTokenStorageSettingsModule,
   ],
 });

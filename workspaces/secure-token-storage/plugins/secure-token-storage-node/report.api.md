@@ -75,6 +75,27 @@ export type SecureTokenStorageErrorCode =
   | 'consent-not-available';
 
 // @public
+export interface SecureTokenStorageProviderGrant {
+  createdAt: Date;
+  expiresAt: Date;
+  grantId: string;
+  provider: string;
+  revokedAt?: Date;
+  scopes: string[];
+}
+
+// @public
+export interface SecureTokenStorageProviderStatus {
+  accessTokenExpiresAt?: Date;
+  configured: boolean;
+  connected: boolean;
+  grants: SecureTokenStorageProviderGrant[];
+  provider: string;
+  reconnectRequired: boolean;
+  scopes: string[];
+}
+
+// @public
 export interface SecureTokenStorageService {
   approveProviderConnection(input: {
     sessionId: string;
@@ -110,6 +131,9 @@ export interface SecureTokenStorageService {
     userEntityRef: string;
     provider?: string;
   }): Promise<TokenGrant[]>;
+  listProviders(options: {
+    userEntityRef: string;
+  }): Promise<SecureTokenStorageProviderStatus[]>;
   refreshGrant(options: {
     grantId: string;
     userEntityRef: string;

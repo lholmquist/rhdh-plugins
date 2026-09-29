@@ -6,16 +6,17 @@ and using that grant from the provider-token-grant workflow.
 
 The complete flow is:
 
-1. A user signs in to Backstage and authorizes GitHub.
-2. The secure-token-storage backend encrypts and stores the provider tokens.
-3. The user approves an opaque, caller-bound grant.
-4. Orchestrator passes the grant ID to a workflow in a request header. If the
+1. A user signs in to Backstage with any configured authentication provider.
+2. The user separately connects GitHub for workflow access.
+3. The secure-token-storage backend encrypts and stores the provider tokens.
+4. The user approves an opaque, caller-bound grant.
+5. Orchestrator passes the grant ID to a workflow in a request header. If the
    workflow form omits the grant ID, the backend can resolve an active grant
    for the initiating user.
-5. The workflow presents the grant and its service credential to the broker.
-6. The broker returns a usable provider access token to the trusted workflow,
+6. The workflow presents the grant and its service credential to the broker.
+7. The broker returns a usable provider access token to the trusted workflow,
    refreshing an expired provider token when possible.
-7. The workflow uses the token immediately and returns only a sanitized GitHub
+8. The workflow uses the token immediately and returns only a sanitized GitHub
    profile.
 
 The sample uses an in-memory SQLite database. Restarting the Backstage backend
@@ -68,8 +69,10 @@ YARN_ENABLE_SCRIPTS=true yarn install
 
 ## Configure the environment
 
-The current sample uses the same GitHub OAuth application for Backstage
-sign-in and the secure-token-storage GitHub connection:
+The sample uses one GitHub OAuth application for two separate flows: RHDH
+sign-in and the secure-token-storage workflow connection. Signing in does not
+create a workflow grant, and connecting GitHub does not replace the RHDH
+session.
 
 ```bash
 export GITHUB_CLIENT_ID='<client-id>'
@@ -162,14 +165,15 @@ cd /Users/lholmqui/develop/redhat-developer/rhdh-plugins/workspaces/secure-token
 yarn workspace app start
 ```
 
-Open [http://localhost:3000](http://localhost:3000) and sign in with GitHub.
-The sample catalog contains `user:default/lholmquist`, which matches the
-configured `usernameMatchingUserEntityName` resolver. If a different GitHub
-account is used, update the local user entity in `examples/org.yaml` so its
-name matches the GitHub username, then restart the backend.
+Open [http://localhost:3000](http://localhost:3000). Select GitHub to test the
+catalog identity setup. The sample catalog contains
+`user:default/lholmquist`, which matches the configured
+`usernameMatchingUserEntityName` resolver. If you use a different GitHub
+account, update the local user entity in `examples/org.yaml` so its name
+matches the GitHub username, then restart the backend.
 
-Guest sign-in remains available for basic UI testing, but the GitHub identity
-is the intended end-to-end path.
+Select Guest when you want to test a login provider that differs from the
+GitHub workflow connection. The sample config enables both sign-in options.
 
 ## Smoke-test the broker
 
@@ -187,28 +191,90 @@ Expected response:
 
 Open the **Provider connections** page at
 [http://localhost:3000/secure-token-storage](http://localhost:3000/secure-token-storage).
-With a new in-memory database, the active-grants section should display
+With a new in-memory database, **Active workflow grants** should display
 `No grants found.`
+
+## Verify provider discovery and status
+
+The Provider connections page and the Settings section load
+`GET /api/secure-token-storage/providers` with the signed-in Backstage user's
+credentials. The endpoint returns configured-provider status,
+connection metadata, and grant metadata for that user. It does not return token
+values or encrypted token data.
+
+The sample config currently configures GitHub under
+`secureTokenStorage.oauth.providers`. This is separate from
+`auth.providers.github`, which configures Backstage sign-in. The page gets
+workflow connection choices from the secure-token-storage backend, not from
+the Backstage sign-in providers.
+
+To inspect the endpoint:
+
+1. Sign in to the sample app.
+2. Open the Provider connections page or the Settings Authentication Providers tab.
+3. Open the browser's developer tools and select **Network**.
+4. Reload the page and select `GET /api/secure-token-storage/providers`.
+5. Confirm the request succeeds and inspect the response fields.
+
+The response includes `provider`, `configured`, `connected`, `scopes`,
+`reconnectRequired`, and `grants`. `accessTokenExpiresAt` appears when the
+stored connection has an expiry. Each grant includes its ID, provider, scopes,
+and creation and expiration timestamps. A revoked grant also has a revocation
+timestamp. Before the first connection, GitHub is configured but not connected,
+with no grants. After you connect and approve access, reload the page and
+confirm the response shows the connection and grant metadata.
+
+The response must not include `accessToken`, `refreshToken`, or ciphertext
+fields. This endpoint requires a signed-in Backstage user. Do not send
+`BACKSTAGE_EXTERNAL_ACCESS_TOKEN` to it. That service credential is for trusted
+broker calls such as `POST /api/secure-token-storage/token`.
+
+### Verify the Settings integration
+
+Open [Settings > Authentication Providers](http://localhost:3000/settings/auth-providers).
+Confirm that the configured Backstage sign-in rows remain visible. Confirm that
+a separate Workflow provider connections section appears below them.
+
+Select Connect GitHub in the workflow section and complete OAuth. The callback
+returns to Settings with the requested scopes. Reload Settings before you
+approve. The approval card remains visible. Select Approve to create the grant.
+Confirm it appears under Active workflow grants.
+
+Select **Reject** to discard a pending request. The Settings section returns to
+grant management. If the OAuth request expired or its callback was already
+used, Settings explains the error. Use the new connection action when retry is
+possible.
+
+To check the disabled state, set `secureTokenStorage.enabled` to `false` in
+`app-config.yaml`. Restart the backend, then confirm the workflow section is
+hidden while the Backstage sign-in rows remain. Restore `enabled: true` and
+restart the backend before continuing.
 
 ## Connect GitHub and approve a grant
 
 ### Recommended UI flow
 
-Select **Connect GitHub** on the Provider connections page. The frontend asks
-the backend to create a one-time connection session and then navigates to
-GitHub automatically. The `sonataflow` service credential is never exposed to
-the browser.
+On the Provider connections page or in **Settings > Authentication Providers**,
+select **Connect GitHub**. The frontend asks the backend to create a one-time
+connection session and then navigates to GitHub automatically. The `sonataflow`
+service credential is never exposed to the browser.
 
-After authorizing GitHub, the callback returns to the Provider connections
-page. Select **Approve** to create a caller-bound grant, or **Reject** to
-discard the connection request.
+After authorizing GitHub, the callback returns to the workflow provider
+connections section in Settings and shows the requested scopes. Select Approve
+to create a caller-bound grant, or Reject to discard the connection request.
 
-After approval, the active-grants section shows the provider, scopes, grant
+If the OAuth callback reports an expired, consumed, or denied request, Settings
+shows the reason. Use the new connection action when retry is possible. The
+standalone Provider connections page remains available at
+[http://localhost:3000/secure-token-storage](http://localhost:3000/secure-token-storage)
+for existing consent links and compatibility testing.
+
+After approval, **Active workflow grants** shows the provider, scopes, grant
 ID, and expiration time. Copy the grant ID when running the direct broker or
 standalone workflow tests below:
 
 ```bash
-export GRANT_ID='<grant-id-from-active-grants>'
+export GRANT_ID='<grant-id-from-active-workflow-grants>'
 ```
 
 The page supports these operations:
@@ -218,6 +284,31 @@ The page supports these operations:
 - **Revoke** invalidates one grant and removes it from the active list.
 - **Disconnect provider** revokes the provider's grants and removes its stored
   connection.
+
+### Verify authentication and workflow connections are independent
+
+For this check, sign in with Guest, then connect GitHub as the workflow
+provider from [Settings > Authentication Providers](http://localhost:3000/settings/auth-providers).
+
+1. Complete the GitHub connection and approval flow above, then record the grant
+   ID shown under **Active workflow grants**.
+2. Sign out of RHDH through the normal user menu. Do not select **Revoke** or
+   **Disconnect provider**.
+3. Keep the backend running. A backend restart clears the sample's in-memory
+   database and invalidates this test.
+4. Sign in again with Guest.
+5. Return to Settings and verify that the workflow connection remains active.
+   Confirm that **Active workflow grants** shows the same
+   grant ID.
+
+The login provider can differ from the connected workflow provider. If two
+login providers resolve to the same Backstage `userEntityRef`, either login must
+show the same workflow grants. A login that resolves to a different
+`userEntityRef` must not show them.
+
+To prove that logout did not disable queued workflows, run the command in
+**Test service-authenticated token retrieval** after step 5. The service request
+must still return `"hasAccessToken": true` while the user is logged out.
 
 ### Optional trusted-service flow
 
