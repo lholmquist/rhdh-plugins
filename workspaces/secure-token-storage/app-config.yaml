@@ -1,13 +1,13 @@
 app:
   title: Secure Token Storage Test Host
-  baseUrl: http://localhost:3000
+  baseUrl: http://localhost:3001
   packages: all
 
 organization:
   name: Red Hat
 
 backend:
-  baseUrl: http://localhost:7007
+  baseUrl: http://localhost:7008
   auth:
     externalAccess:
       - type: static
@@ -16,9 +16,9 @@ backend:
           token: bXljdXJscGFzc3dkCg== # NOSONAR
           subject: sonataflow
   listen:
-    port: 7007
+    port: 7008
   cors:
-    origin: http://localhost:3000
+    origin: http://localhost:3001
     methods: [GET, HEAD, PATCH, POST, PUT, DELETE]
     credentials: true
   database:
@@ -75,27 +75,27 @@ orchestrator:
   sonataFlowService:
     runtime: podman
     baseUrl: http://localhost
-    port: 8899
+    port: 18080
     autoStart: true
     # This is a local development-only value, matching the upstream example.
     notificationsBearerToken: bXljdXJscGFzc3dkCg== # NOSONAR
     # Podman containers reach the host backend through this hostname.
-    notificationsUrl: http://host.containers.internal:7007
+    notificationsUrl: http://host.containers.internal:7008
     workflowsSource:
       gitRepositoryUrl: https://github.com/rhdhorchestrator/backstage-orchestrator-workflows.git
       localPath: ./.devModeTemp/repository
   dataIndexService:
-    url: http://localhost:8899
+    url: http://localhost:18080
 
 secureTokenStorage:
   enabled: true
   allowedCallerSubjects:
     - sonataflow
   oauth:
-    consentUrl: http://localhost:3000/secure-token-storage
+    consentUrl: http://localhost:3001/secure-token-storage
     userConnection:
       callerSubject: sonataflow
-      redirectUri: http://localhost:7007/api/secure-token-storage/connections/github/callback
+      redirectUri: http://localhost:7008/api/secure-token-storage/connections/github/callback
       scopes:
         - read:user
         # GitHub OAuth Apps do not provide a read-only private repository scope.
@@ -106,7 +106,7 @@ secureTokenStorage:
         clientId: ${GITHUB_CLIENT_ID}
         clientSecret: ${GITHUB_CLIENT_SECRET}
     allowedRedirectUris:
-      - http://localhost:7007/api/secure-token-storage/connections/github/callback
-      - http://localhost:7007/api/secure-token-storage/connections/microsoft/callback
+      - http://localhost:7008/api/secure-token-storage/connections/github/callback
+      - http://localhost:7008/api/secure-token-storage/connections/microsoft/callback
   encryption:
     activeKey: ${SECURE_TOKEN_STORAGE_ENCRYPTION_KEY}

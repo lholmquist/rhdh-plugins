@@ -34,8 +34,8 @@ Install or have access to:
 Configure the GitHub OAuth application with both callback URLs:
 
 ```text
-http://localhost:7007/api/auth/github/handler/frame
-http://localhost:7007/api/secure-token-storage/connections/github/callback
+http://localhost:7008/api/auth/github/handler/frame
+http://localhost:7008/api/secure-token-storage/connections/github/callback
 ```
 
 The first callback is for Backstage sign-in. The second is for the provider
@@ -44,7 +44,7 @@ connection whose token is stored by secure token storage.
 The backend also has a Microsoft adapter. To test it, register this callback:
 
 ```text
-http://localhost:7007/api/secure-token-storage/connections/microsoft/callback
+http://localhost:7008/api/secure-token-storage/connections/microsoft/callback
 ```
 
 Keep all OAuth credentials outside the repository.
@@ -141,11 +141,11 @@ From the sample workspace, start the frontend and backend together:
 
 ```bash
 cd /Users/lholmqui/develop/redhat-developer/rhdh-plugins/workspaces/secure-token-storage
-yarn dev
+PORT=3001 yarn dev
 ```
 
 The environment variables from the previous section must be exported in this
-terminal. The frontend runs on port `3000`, the Backstage backend on `7007`,
+terminal. The frontend runs on port `3001`, the Backstage backend on `7008`,
 and the configured Podman-backed SonataFlow development runtime on `8080`.
 
 For separate logs or backend debugging, use two terminals instead:
@@ -159,10 +159,10 @@ yarn workspace backend start --config ../../app-config.yaml
 ```bash
 # Terminal 2
 cd /Users/lholmqui/develop/redhat-developer/rhdh-plugins/workspaces/secure-token-storage
-yarn workspace app start
+PORT=3001 yarn workspace app start
 ```
 
-Open [http://localhost:3000](http://localhost:3000) and sign in with GitHub.
+Open [http://localhost:3001](http://localhost:3001) and sign in with GitHub.
 The sample catalog contains `user:default/lholmquist`, which matches the
 configured `usernameMatchingUserEntityName` resolver. If a different GitHub
 account is used, update the local user entity in `examples/org.yaml` so its
@@ -176,7 +176,7 @@ is the intended end-to-end path.
 The health endpoint does not require authentication:
 
 ```bash
-curl --fail http://localhost:7007/api/secure-token-storage/health
+curl --fail http://localhost:7008/api/secure-token-storage/health
 ```
 
 Expected response:
@@ -186,7 +186,7 @@ Expected response:
 ```
 
 Open the **Provider connections** page at
-[http://localhost:3000/secure-token-storage](http://localhost:3000/secure-token-storage).
+[http://localhost:3001/secure-token-storage](http://localhost:3001/secure-token-storage).
 With a new in-memory database, the active-grants section should display
 `No grants found.`
 
@@ -228,13 +228,13 @@ low-level testing:
 CONNECTION_RESPONSE="$(
   curl --fail --silent --show-error \
     -X POST \
-    http://localhost:7007/api/secure-token-storage/connections/github/start \
+    http://localhost:7008/api/secure-token-storage/connections/github/start \
     -H "Authorization: Bearer ${BACKSTAGE_EXTERNAL_ACCESS_TOKEN}" \
     -H 'Content-Type: application/json' \
     -d '{
       "userEntityRef": "user:default/lholmquist",
       "scopes": ["read:user", "repo", "read:org"],
-      "redirectUri": "http://localhost:7007/api/secure-token-storage/connections/github/callback"
+      "redirectUri": "http://localhost:7008/api/secure-token-storage/connections/github/callback"
     }'
 )"
 
@@ -253,7 +253,7 @@ filters the secret from the displayed response:
 ```bash
 curl --fail --silent --show-error \
   -X POST \
-  http://localhost:7007/api/secure-token-storage/token \
+  http://localhost:7008/api/secure-token-storage/token \
   -H "Authorization: Bearer ${BACKSTAGE_EXTERNAL_ACCESS_TOKEN}" \
   -H 'Content-Type: application/json' \
   -d "{\"grantId\":\"${GRANT_ID}\",\"provider\":\"github\"}" \
@@ -298,7 +298,7 @@ Backstage backend because it does not call the broker until a workflow is run:
 ```bash
 cd /Users/lholmqui/develop/rhdhorchestrator/orchestrator-demo/10_provider_token_grant
 
-export SECURE_TOKEN_STORAGE_URL='http://localhost:7007/api/secure-token-storage/token'
+export SECURE_TOKEN_STORAGE_URL='http://localhost:7008/api/secure-token-storage/token'
 export SECURE_TOKEN_STORAGE_SERVICE_TOKEN="${BACKSTAGE_EXTERNAL_ACCESS_TOKEN}"
 
 mvn -q quarkus:dev
@@ -323,9 +323,9 @@ The `sonataFlowService.port` value and the port in `dataIndexService.url` must
 both match the workflow demo's running port. If the demo is running on a port
 other than `8080`, update both values accordingly.
 
-Start the sample application with `yarn dev`, connect GitHub, and approve a
+Start the sample application with `PORT=3001 yarn dev`, connect GitHub, and approve a
 grant as described above. Then open
-[http://localhost:3000/orchestrator](http://localhost:3000/orchestrator), select
+[http://localhost:3001/orchestrator](http://localhost:3001/orchestrator), select
 **Provider Token Grant Consumer**, and select **Run**.
 
 You can leave both form fields empty when the signed-in user has exactly one
@@ -346,7 +346,7 @@ for a standalone workflow consumer test:
 ```bash
 cd /Users/lholmqui/develop/rhdhorchestrator/orchestrator-demo/10_provider_token_grant
 
-export SECURE_TOKEN_STORAGE_URL='http://localhost:7007/api/secure-token-storage/token'
+export SECURE_TOKEN_STORAGE_URL='http://localhost:7008/api/secure-token-storage/token'
 export SECURE_TOKEN_STORAGE_SERVICE_TOKEN="${BACKSTAGE_EXTERNAL_ACCESS_TOKEN}"
 
 mvn -q quarkus:dev -Dquarkus.http.port=18080
@@ -453,7 +453,7 @@ and grant.
 | `invalid-redirect-uri`                   | Use the exact callback URL in `app-config.yaml` and registered with GitHub.                                               |
 | GitHub sign-in cannot resolve the user   | Confirm the GitHub username matches the `User` entity name in `examples/org.yaml`.                                        |
 | `caller-not-authorized`                  | Confirm the service token maps to `sonataflow`, which must remain in `allowedCallerSubjects`.                             |
-| Provider connections cannot load grants  | Confirm the frontend is on port `3000`, the backend is on `7007`, and the browser has an authenticated Backstage session. |
+| Provider connections cannot load grants  | Confirm the frontend is on port `3001`, the backend is on `7008`, and the browser has an authenticated Backstage session. |
 | `provider-refresh-required`              | Reconnect after enabling GitHub expiring user tokens so the stored connection includes a refresh token.                   |
 | Standalone workflow cannot reach broker  | Use `localhost` for a host process and `host.containers.internal` for a Podman container.                                 |
 | Workflow service token is missing        | Export `SECURE_TOKEN_STORAGE_SERVICE_TOKEN` in the workflow terminal.                                                     |

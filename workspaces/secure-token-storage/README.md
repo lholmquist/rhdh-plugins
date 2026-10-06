@@ -110,13 +110,13 @@ export SECURE_TOKEN_STORAGE_ENCRYPTION_KEY="$(
 )"
 
 podman machine start
-yarn dev
+PORT=3001 yarn dev
 ```
 
-The frontend runs at [http://localhost:3000](http://localhost:3000), the
-backend at [http://localhost:7007](http://localhost:7007), and the Provider
+The frontend runs at [http://localhost:3001](http://localhost:3001), the
+backend at [http://localhost:7008](http://localhost:7008), and the Provider
 connections page at
-[http://localhost:3000/secure-token-storage](http://localhost:3000/secure-token-storage).
+[http://localhost:3001/secure-token-storage](http://localhost:3001/secure-token-storage).
 
 For dependency installation, OAuth callback setup, GitHub connection and
 consent, grant testing, automatic token refresh, and both direct and

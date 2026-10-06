@@ -1,0 +1,64 @@
+{
+  "name": "@red-hat-developer-hub/backstage-plugin-provider-token-backend",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "publishConfig": {
+    "access": "public",
+    "main": "dist/index.cjs.js",
+    "types": "dist/index.d.ts"
+  },
+  "backstage": {
+    "role": "backend-plugin",
+    "pluginId": "provider-token",
+    "pluginPackages": [
+      "@red-hat-developer-hub/backstage-plugin-provider-token",
+      "@red-hat-developer-hub/backstage-plugin-provider-token-common",
+      "@red-hat-developer-hub/backstage-plugin-provider-token-node",
+      "@red-hat-developer-hub/backstage-plugin-provider-token-backend",
+      "@red-hat-developer-hub/backstage-plugin-provider-token-backend-module-github",
+      "@red-hat-developer-hub/backstage-plugin-provider-token-backend-module-microsoft"
+    ]
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./package.json": "./package.json"
+  },
+  "typesVersions": {
+    "*": {
+      "package.json": [
+        "package.json"
+      ]
+    }
+  },
+  "configSchema": "config.d.ts",
+  "scripts": {
+    "start": "backstage-cli package start",
+    "build": "backstage-cli package build",
+    "lint": "backstage-cli package lint",
+    "test": "backstage-cli package test --runInBand --watchAll=false",
+    "clean": "backstage-cli package clean",
+    "prepack": "backstage-cli package prepack",
+    "postpack": "backstage-cli package postpack"
+  },
+  "dependencies": {
+    "@backstage/backend-plugin-api": "^1.10.0",
+    "@backstage/plugin-permission-common": "^0.9.10",
+    "@red-hat-developer-hub/backstage-plugin-provider-token-common": "workspace:^",
+    "@red-hat-developer-hub/backstage-plugin-provider-token-node": "workspace:^",
+    "express": "^4.21.2",
+    "express-promise-router": "^4.1.1"
+  },
+  "devDependencies": {
+    "@backstage/backend-test-utils": "^1.11.6",
+    "@backstage/cli": "^0.36.5",
+    "better-sqlite3": "^12.0.0",
+    "knex": "^3.1.0"
+  },
+  "files": [
+    "dist",
+    "migrations",
+    "config.d.ts"
+  ]
+}

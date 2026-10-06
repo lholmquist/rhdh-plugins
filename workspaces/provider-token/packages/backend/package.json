@@ -1,0 +1,33 @@
+{
+  "name": "backend",
+  "version": "0.0.0",
+  "private": true,
+  "main": "dist/index.cjs.js",
+  "types": "src/index.ts",
+  "backstage": {
+    "role": "backend"
+  },
+  "scripts": {
+    "start": "backstage-cli package start",
+    "build": "backstage-cli package build",
+    "lint": "backstage-cli package lint",
+    "clean": "backstage-cli package clean"
+  },
+  "dependencies": {
+    "@backstage/backend-defaults": "^0.17.7",
+    "@backstage/plugin-app-backend": "^0.5.17",
+    "@backstage/plugin-auth-backend": "^0.30.0",
+    "@backstage/plugin-auth-backend-module-guest-provider": "^0.2.22",
+    "@red-hat-developer-hub/backstage-plugin-provider-token-backend": "workspace:^",
+    "@red-hat-developer-hub/backstage-plugin-provider-token-backend-module-github": "workspace:^",
+    "@red-hat-developer-hub/backstage-plugin-provider-token-backend-module-microsoft": "workspace:^",
+    "better-sqlite3": "^12.0.0",
+    "node-gyp": "^10.0.0"
+  },
+  "devDependencies": {
+    "@backstage/cli": "^0.36.5"
+  },
+  "files": [
+    "dist"
+  ]
+}

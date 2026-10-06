@@ -1,0 +1,33 @@
+app:
+  title: Provider Token Prototype
+  baseUrl: http://localhost:3000
+
+backend:
+  baseUrl: http://localhost:7007
+  auth:
+    externalAccess:
+      - type: static
+        options:
+          # Local-only service credential for the provider-token workflow demo.
+          token: bXljdXJscGFzc3dkCg== # NOSONAR
+          subject: sonataflow
+  listen:
+    port: 7007
+  cors:
+    origin: http://localhost:3000
+    methods: [GET, HEAD, PATCH, POST, PUT, DELETE]
+    credentials: true
+  database:
+    client: better-sqlite3
+    connection: ':memory:'
+
+auth:
+  environment: development
+  providers:
+    guest: {}
+
+providerToken:
+  enabled: false
+  returnUrlAllowlist:
+    - origin: http://localhost:3000
+      pathPrefix: /provider-token
