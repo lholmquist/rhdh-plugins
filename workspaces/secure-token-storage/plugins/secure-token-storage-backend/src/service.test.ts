@@ -137,11 +137,16 @@ describe('DefaultSecureTokenStorageService', () => {
     expect(repository.findConnection).not.toHaveBeenCalled();
   });
 
-  it('refreshes internally and never returns the refresh token', async () => {
+  it('refreshes internally and logs the stages without exposing tokens', async () => {
     const repository = createRepository();
     const logger = {
       info: jest.fn(),
     } as unknown as jest.Mocked<LoggerService>;
+    const refresh = jest.fn().mockResolvedValue({
+      accessToken: 'fresh-access',
+      refreshToken: 'rotated-refresh',
+      expiresAt: new Date('2026-09-07T13:00:00Z'),
+    });
     const cipher = createTokenCipher({
       activeKey: key,
       activeKeyVersion: 'v1',
@@ -177,18 +182,7 @@ describe('DefaultSecureTokenStorageService', () => {
       repository,
       cipher,
       now: () => new Date('2026-09-07T12:00:00Z'),
-      refreshers: new Map([
-        [
-          'github',
-          {
-            refresh: jest.fn().mockResolvedValue({
-              accessToken: 'fresh-access',
-              refreshToken: 'rotated-refresh',
-              expiresAt: new Date('2026-09-07T13:00:00Z'),
-            }),
-          },
-        ],
-      ]),
+      refreshers: new Map([['github', { refresh }]]),
       logger,
     });
 
@@ -220,6 +214,38 @@ describe('DefaultSecureTokenStorageService', () => {
     expect(JSON.stringify(logger.info.mock.calls)).not.toContain(
       'refresh-token',
     );
+    expect(JSON.stringify(logger.info.mock.calls)).not.toContain('grant-1');
+    const logOutput = logger.info.mock.calls.map(call => call[0]).join('\n');
+    expect(logOutput).toContain('TOKEN REFRESH');
+    expect(logOutput).toContain(
+      'Stage: grant authorized; stored access token expired',
+    );
+    expect(logOutput).toContain(
+      'Stage: provider returned replacement credentials',
+    );
+    expect(logOutput).toContain('Replacement refresh token supplied: yes');
+    expect(logOutput).toContain(
+      'Stage: replacement credentials encrypted and stored',
+    );
+    expect(logOutput).not.toContain('fresh-access');
+    expect(logOutput).not.toContain('rotated-refresh');
+
+    refresh.mockRejectedValueOnce(new Error('provider-secret-response'));
+    await expect(
+      service.getAccessToken({
+        grantId: 'grant-1',
+        provider: 'github',
+        caller: caller('sonataflow'),
+      }),
+    ).rejects.toMatchObject({ code: 'provider-refresh-failed' });
+    const failedLogOutput = logger.info.mock.calls
+      .map(call => call[0])
+      .join('\n');
+    expect(failedLogOutput).toContain(
+      'Stage: refresh failed; no replacement access token returned',
+    );
+    expect(failedLogOutput).toContain('Reason: provider-refresh-failed');
+    expect(failedLogOutput).not.toContain('provider-secret-response');
   });
 
   it('creates a short-lived PKCE session without persisting raw state or verifier', async () => {

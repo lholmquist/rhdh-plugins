@@ -506,7 +506,8 @@ the existing connection does not have a refresh token.
 1. Start the backend with the **Launch Secure Token Storage Workspace** VS Code
    configuration and the environment variables described above.
 2. Set a breakpoint at the expiration check in
-   `plugins/secure-token-storage-backend/src/service.ts`, around line 647.
+   `plugins/secure-token-storage-backend/src/service.ts`, line 727
+   (`connection.accessTokenExpiresAt > now`).
 3. Trigger the direct token request above or run the workflow.
 4. When execution stops, enter this in the VS Code Debug Console:
 

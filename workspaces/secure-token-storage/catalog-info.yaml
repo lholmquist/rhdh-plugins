@@ -21,7 +21,6 @@ spec:
   lifecycle: experimental
   owner: rhdh-plugins
   subcomponentOf: rhdh-plugins
-
 # ---
 # apiVersion: backstage.io/v1alpha1
 # kind: User

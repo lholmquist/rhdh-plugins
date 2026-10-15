@@ -66,13 +66,14 @@ describe('secure token storage router', () => {
       .send({ grantId: 'grant-1', provider: 'github' })
       .expect(200);
 
-    expect(logger.info).toHaveBeenCalledWith(
-      'Secure token storage access token request received',
-    );
-    expect(JSON.stringify(logger.info.mock.calls)).not.toContain(
-      'provider-access-token',
-    );
-    expect(JSON.stringify(logger.info.mock.calls)).not.toContain('grant-1');
+    const logOutput = logger.info.mock.calls.map(call => call[0]).join('\n');
+    expect(logger.info.mock.calls[0][0]).toContain('\n');
+    expect(logOutput).toContain('POST /api/secure-token-storage/token');
+    expect(logOutput).toContain('Stage: request received');
+    expect(logOutput).toContain('Stage: access token returned');
+    expect(logOutput).toContain('Grant ID and token values: [REDACTED]');
+    expect(logOutput).not.toContain('provider-access-token');
+    expect(logOutput).not.toContain('grant-1');
   });
 
   it('derives the caller subject from credentials instead of request data', async () => {
