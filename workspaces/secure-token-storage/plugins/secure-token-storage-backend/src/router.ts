@@ -340,24 +340,51 @@ export async function createRouter(options: {
   });
 
   router.post('/token', async (request, response) => {
-    options.logger?.info('Secure token storage access token request received');
+    // Temporary demo trace: never include the grant ID or token material.
+    const logDemo = (stage: string, details: string[] = []) => {
+      options.logger?.info(
+        [
+          '',
+          '========== SECURE TOKEN STORAGE DEMO: TOKEN ENDPOINT ==========',
+          'Endpoint: POST /api/secure-token-storage/token',
+          `Stage: ${stage}`,
+          ...details,
+          'Grant ID and token values: [REDACTED]',
+          '===============================================================',
+        ].join('\n'),
+      );
+    };
+    logDemo('request received');
     try {
       const credentials = await options.httpAuth.credentials(request, {
         allow: ['service'],
       });
       const { grantId, provider } = request.body ?? {};
       if (!isNonEmptyString(grantId) || !isNonEmptyString(provider)) {
+        logDemo('request rejected', ['Reason: invalid-token-request']);
         response.status(400).json({ error: 'invalid-token-request' });
         return;
       }
-      response.json(
-        await options.service.getAccessToken({
-          grantId,
-          provider,
-          caller: credentials,
-        }),
-      );
+      const tokenResult = await options.service.getAccessToken({
+        grantId,
+        provider,
+        caller: credentials,
+      });
+      logDemo('access token returned to authenticated service', [
+        `Provider: ${provider}`,
+        `Caller subject: ${credentials.principal.subject}`,
+        `Scopes: ${tokenResult.scopes.join(', ')}`,
+        `Expires at: ${tokenResult.expiresAt?.toISOString() ?? 'not provided'}`,
+      ]);
+      response.json(tokenResult);
     } catch (error) {
+      logDemo('request failed', [
+        `Reason: ${
+          error instanceof SecureTokenStorageError
+            ? error.code
+            : 'internal-error'
+        }`,
+      ]);
       sendSafeError(response, error);
     }
   });

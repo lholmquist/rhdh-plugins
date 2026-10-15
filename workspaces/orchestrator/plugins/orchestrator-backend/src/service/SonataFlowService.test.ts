@@ -513,6 +513,12 @@ describe('SonataFlowService', () => {
           },
         }),
       );
+      const logOutput = loggerMock.info.mock.calls
+        .map(call => call[0])
+        .join('\n');
+      expect(logOutput).toContain('PROVIDER GRANT DEMO: ORCHESTRATOR');
+      expect(logOutput).toContain('X-Provider-Token-Grant-Github');
+      expect(logOutput).not.toContain('grant-1');
       expect(JSON.stringify((fetch as jest.Mock).mock.calls)).not.toContain(
         'resolved-provider-token',
       );

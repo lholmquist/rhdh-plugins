@@ -361,6 +361,23 @@ export class SonataFlowService {
     this.addAuthHeaders(headers, args.authTokens, args.backstageToken);
     this.addProviderTokenGrantHeaders(headers, providerTokenGrants);
     const headerKeys = Object.keys(headers);
+    if (providerTokenGrants?.length) {
+      // Temporary demo trace: show the grant handoff without logging its value.
+      this.logger.info(
+        [
+          '',
+          '========== PROVIDER GRANT DEMO: ORCHESTRATOR ==========',
+          'Stage: starting SonataFlow workflow',
+          `Workflow: ${args.definitionId}`,
+          `Grant source: ${args.providerTokenGrants?.length ? 'explicit run request' : 'initiating user lookup'}`,
+          `Grant headers: ${headerKeys
+            .filter(name => name.startsWith('X-Provider-Token-Grant-'))
+            .join(', ')}`,
+          'Grant IDs: [REDACTED]',
+          '=======================================================',
+        ].join('\n'),
+      );
+    }
     this.logger.info(
       `Executing workflow ${args.definitionId} with headers: ${headerKeys.join(', ')}`,
     );

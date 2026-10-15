@@ -653,6 +653,17 @@ export class DefaultSecureTokenStorageService
     this.assertReady();
     const now = this.now();
     const callerSubject = requireServiceSubject(options.caller);
+    // Temporary demo trace: show the grant lookup without logging its value.
+    this.logger?.info(
+      [
+        '',
+        '========== SECURE TOKEN STORAGE DEMO: GRANT ACCESS ==========',
+        'Action: look up stored grant by opaque grant ID',
+        `Authenticated caller: ${callerSubject}`,
+        'Grant ID and provider credentials: [REDACTED]',
+        '=============================================================',
+      ].join('\n'),
+    );
     const grant = await this.repository!.findGrant(options.grantId);
     if (!grant || grant.provider !== options.provider) {
       return this.denyGrantAccess(options, callerSubject, 'grant-not-found');
@@ -725,6 +736,19 @@ export class DefaultSecureTokenStorageService
         callerSubject,
         metadata: { refreshed: false },
       });
+      this.logger?.info(
+        [
+          '',
+          '========== SECURE TOKEN STORAGE DEMO: GRANT ACCESS ==========',
+          'Result: grant authorized; stored provider access token is valid',
+          `Provider: ${grant.provider}`,
+          `Expires at: ${
+            connection.accessTokenExpiresAt?.toISOString() ?? 'not provided'
+          }`,
+          'Access token: [REDACTED]',
+          '=============================================================',
+        ].join('\n'),
+      );
       return {
         accessToken,
         expiresAt: connection.accessTokenExpiresAt,
@@ -750,6 +774,22 @@ export class DefaultSecureTokenStorageService
       );
     }
 
+    /*
+     * Temporary demo trace: refresh happens only after grant and caller checks.
+     * Keep provider credentials inside this service, and persist the encrypted
+     * replacement before returning an access token to the requesting workflow.
+     */
+    this.logger?.info(
+      [
+        '',
+        '========== SECURE TOKEN STORAGE DEMO: TOKEN REFRESH ==========',
+        'Stage: grant authorized; stored access token expired',
+        `Provider: ${grant.provider}`,
+        'Next: decrypt stored refresh credential and call provider adapter',
+        'Grant ID and token values: [REDACTED]',
+        '==============================================================',
+      ].join('\n'),
+    );
     this.logger?.info('Attempting to refresh expired provider access token', {
       provider: grant.provider,
       callerSubject,
@@ -767,6 +807,19 @@ export class DefaultSecureTokenStorageService
         refreshToken,
         scopes: grant.scopes,
       });
+      this.logger?.info(
+        [
+          '',
+          '========== SECURE TOKEN STORAGE DEMO: TOKEN REFRESH ==========',
+          'Stage: provider returned replacement credentials',
+          `Replacement refresh token supplied: ${
+            refreshed.refreshToken ? 'yes' : 'no'
+          }`,
+          'Next: encrypt and persist before returning the access token',
+          'Grant ID and token values: [REDACTED]',
+          '==============================================================',
+        ].join('\n'),
+      );
       const refreshedAccessToken = this.cipher!.encrypt(
         refreshed.accessToken,
         associatedData(connection.id, 'access'),
@@ -787,6 +840,23 @@ export class DefaultSecureTokenStorageService
         now,
       );
     } catch (error) {
+      this.logger?.info(
+        [
+          '',
+          '========== SECURE TOKEN STORAGE DEMO: TOKEN REFRESH ==========',
+          'Stage: refresh failed; no replacement access token returned',
+          `Reason: ${
+            // eslint-disable-next-line no-nested-ternary
+            error instanceof TokenCipherError
+              ? 'token-integrity-failed'
+              : error instanceof SecureTokenStorageError
+              ? error.code
+              : 'provider-refresh-failed'
+          }`,
+          'Grant ID, token values, and provider error: [REDACTED]',
+          '==============================================================',
+        ].join('\n'),
+      );
       if (error instanceof TokenCipherError) {
         return this.denyGrantAccess(
           options,
@@ -826,6 +896,18 @@ export class DefaultSecureTokenStorageService
       callerSubject,
       metadata: { refreshed: true },
     });
+    this.logger?.info(
+      [
+        '',
+        '========== SECURE TOKEN STORAGE DEMO: TOKEN REFRESH ==========',
+        'Stage: replacement credentials encrypted and stored',
+        `Provider: ${grant.provider}`,
+        `New expiry: ${refreshed.expiresAt?.toISOString() ?? 'not provided'}`,
+        'Next: return usable access token to authenticated service',
+        'Grant ID unchanged; token values: [REDACTED]',
+        '==============================================================',
+      ].join('\n'),
+    );
     return {
       accessToken: refreshed.accessToken,
       expiresAt: refreshed.expiresAt,
@@ -940,6 +1022,16 @@ export class DefaultSecureTokenStorageService
     code: SecureTokenStorageErrorCode,
     context: { userEntityRef?: string } = {},
   ): Promise<never> {
+    this.logger?.info(
+      [
+        '',
+        '========== SECURE TOKEN STORAGE DEMO: GRANT ACCESS ==========',
+        'Result: token request denied during grant validation',
+        `Reason: ${code}`,
+        'Grant ID and provider credentials: [REDACTED]',
+        '=============================================================',
+      ].join('\n'),
+    );
     await this.recordAudit({
       eventType: 'grant-denied',
       userEntityRef: context.userEntityRef,
