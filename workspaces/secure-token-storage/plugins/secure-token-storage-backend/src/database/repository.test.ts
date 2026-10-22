@@ -42,6 +42,7 @@ describe('TokenStorageRepository', () => {
       'secure_token_storage_connect_sessions',
       table => {
         table.string('id').primary();
+        table.string('session_type').notNullable().defaultTo('oauth');
         table.string('state_hash').notNullable().unique();
         table.string('user_entity_ref').notNullable();
         table.string('caller_subject').notNullable();
@@ -81,6 +82,7 @@ describe('TokenStorageRepository', () => {
   it('maps nullable SQLite session fields to absent optional values', async () => {
     await database('secure_token_storage_connect_sessions').insert({
       id: 'session-1',
+      session_type: 'oauth',
       state_hash: 'state-hash',
       user_entity_ref: 'user:default/luke',
       caller_subject: 'sonataflow',
@@ -110,6 +112,199 @@ describe('TokenStorageRepository', () => {
       consentDecidedAt: undefined,
       grantId: undefined,
     });
+  });
+
+  it('persists and approves a consent-only session from an existing connection', async () => {
+    const repository = new TokenStorageRepository(database as never);
+    const now = new Date('2026-09-07T12:00:00Z');
+    await database('secure_token_storage_connections').insert({
+      id: 'connection-1',
+      user_entity_ref: 'user:default/luke',
+      provider: 'github',
+      access_token_ciphertext: 'ciphertext',
+      access_token_iv: 'iv',
+      access_token_auth_tag: 'auth-tag',
+      access_token_key_version: 'v1',
+      scopes_json: JSON.stringify(['repo']),
+      created_at: now,
+      updated_at: now,
+    });
+    await repository.createConnectSession({
+      id: 'grant-consent-1',
+      sessionType: 'grant-consent',
+      stateHash: 'internal-state-hash',
+      userEntityRef: 'user:default/luke',
+      callerSubject: 'sonataflow',
+      provider: 'github',
+      scopes: ['repo'],
+      redirectUri: 'http://localhost/callback',
+      codeVerifier: {
+        ciphertext: 'ciphertext',
+        iv: 'iv',
+        authTag: 'auth-tag',
+        keyVersion: 'v1',
+      },
+      createdAt: now,
+      expiresAt: new Date('2026-09-07T12:05:00Z'),
+      stateConsumedAt: now,
+      completedAt: now,
+      consentStatus: 'pending',
+    });
+
+    const session = await repository.findConnectSession('grant-consent-1');
+    expect(session).toMatchObject({
+      sessionType: 'grant-consent',
+      stateConsumedAt: now,
+      completedAt: now,
+      consentStatus: 'pending',
+    });
+
+    await expect(
+      repository.approveConnectSession(
+        'grant-consent-1',
+        'user:default/luke',
+        {
+          id: 'grant-1',
+          userEntityRef: 'user:default/luke',
+          callerSubject: 'sonataflow',
+          provider: 'github',
+          scopes: ['repo'],
+          createdAt: now,
+          expiresAt: new Date('2026-09-08T12:00:00Z'),
+        },
+        now,
+      ),
+    ).resolves.toBe(true);
+    await expect(
+      repository.findConnectSession('grant-consent-1'),
+    ).resolves.toMatchObject({
+      consentStatus: 'approved',
+      grantId: 'grant-1',
+    });
+  });
+
+  it('cancels pending approval sessions when the provider is disconnected', async () => {
+    const repository = new TokenStorageRepository(database as never);
+    const now = new Date('2026-09-07T12:00:00Z');
+    await database('secure_token_storage_connections').insert({
+      id: 'connection-1',
+      user_entity_ref: 'user:default/luke',
+      provider: 'github',
+      access_token_ciphertext: 'ciphertext',
+      access_token_iv: 'iv',
+      access_token_auth_tag: 'auth-tag',
+      access_token_key_version: 'v1',
+      scopes_json: JSON.stringify(['repo']),
+      created_at: now,
+      updated_at: now,
+    });
+    await database('secure_token_storage_connect_sessions').insert({
+      id: 'grant-consent-1',
+      session_type: 'grant-consent',
+      state_hash: 'internal-state-hash',
+      user_entity_ref: 'user:default/luke',
+      caller_subject: 'sonataflow',
+      provider: 'github',
+      scopes_json: JSON.stringify(['repo']),
+      redirect_uri: 'http://localhost/callback',
+      code_verifier_ciphertext: 'ciphertext',
+      code_verifier_iv: 'iv',
+      code_verifier_auth_tag: 'auth-tag',
+      code_verifier_key_version: 'v1',
+      created_at: now,
+      expires_at: new Date('2026-09-07T12:05:00Z'),
+      state_consumed_at: now,
+      completed_at: now,
+      consent_status: 'pending',
+    });
+
+    await expect(
+      repository.disconnectProvider('user:default/luke', 'github', now),
+    ).resolves.toEqual({ connectionId: 'connection-1', revokedGrantCount: 0 });
+    await expect(
+      repository.findConnectSession('grant-consent-1'),
+    ).resolves.toMatchObject({
+      consentStatus: 'rejected',
+      consentDecidedAt: now,
+    });
+    await expect(
+      repository.approveConnectSession(
+        'grant-consent-1',
+        'user:default/luke',
+        {
+          id: 'grant-1',
+          userEntityRef: 'user:default/luke',
+          callerSubject: 'sonataflow',
+          provider: 'github',
+          scopes: ['repo'],
+          createdAt: now,
+          expiresAt: new Date('2026-09-08T12:00:00Z'),
+        },
+        now,
+      ),
+    ).resolves.toBe(false);
+    await expect(
+      database('secure_token_storage_grants').count('* as count').first(),
+    ).resolves.toMatchObject({ count: 0 });
+  });
+
+  it('does not approve a pending session without a live provider connection', async () => {
+    const repository = new TokenStorageRepository(database as never);
+    const now = new Date('2026-09-07T12:00:00Z');
+    await database('secure_token_storage_connections').insert({
+      id: 'connection-1',
+      user_entity_ref: 'user:default/luke',
+      provider: 'github',
+      access_token_ciphertext: 'ciphertext',
+      access_token_iv: 'iv',
+      access_token_auth_tag: 'auth-tag',
+      access_token_key_version: 'v1',
+      scopes_json: JSON.stringify(['repo']),
+      created_at: now,
+      updated_at: now,
+      revoked_at: now,
+    });
+    await repository.createConnectSession({
+      id: 'grant-consent-1',
+      sessionType: 'grant-consent',
+      stateHash: 'internal-state-hash',
+      userEntityRef: 'user:default/luke',
+      callerSubject: 'sonataflow',
+      provider: 'github',
+      scopes: ['repo'],
+      redirectUri: 'http://localhost/callback',
+      codeVerifier: {
+        ciphertext: 'ciphertext',
+        iv: 'iv',
+        authTag: 'auth-tag',
+        keyVersion: 'v1',
+      },
+      createdAt: now,
+      expiresAt: new Date('2026-09-07T12:05:00Z'),
+      stateConsumedAt: now,
+      completedAt: now,
+      consentStatus: 'pending',
+    });
+
+    await expect(
+      repository.approveConnectSession(
+        'grant-consent-1',
+        'user:default/luke',
+        {
+          id: 'grant-1',
+          userEntityRef: 'user:default/luke',
+          callerSubject: 'sonataflow',
+          provider: 'github',
+          scopes: ['repo'],
+          createdAt: now,
+          expiresAt: new Date('2026-09-08T12:00:00Z'),
+        },
+        now,
+      ),
+    ).resolves.toBe(false);
+    await expect(
+      database('secure_token_storage_grants').count('* as count').first(),
+    ).resolves.toMatchObject({ count: 0 });
   });
 
   it('updates the expiry of an active grant owned by the user', async () => {

@@ -24,10 +24,11 @@ function providerStatus(
   return {
     provider,
     configured: true,
-    connected: true,
+    connected: false,
     scopes: provider === 'microsoft' ? ['User.Read'] : ['repo'],
     accessTokenExpiresAt: '2026-09-08T12:00:00.000Z',
     reconnectRequired: false,
+    userConnectionConfigured: true,
     grants,
     ...overrides,
   };
@@ -182,7 +183,10 @@ describe('SecureTokenStoragePage frontend plugin page', () => {
       new Response(
         JSON.stringify([
           providerStatus('github'),
-          providerStatus('microsoft', [], { reconnectRequired: true }),
+          providerStatus('microsoft', [], {
+            connected: true,
+            reconnectRequired: true,
+          }),
           providerStatus('legacy-provider', [], {
             configured: false,
             reconnectRequired: true,
@@ -216,6 +220,11 @@ describe('SecureTokenStoragePage frontend plugin page', () => {
         'button[aria-label="Reconnect Microsoft for workflow access"]',
       ),
     ).toBeDefined();
+    expect(
+      container.querySelector(
+        'button[aria-label="Request Microsoft grant approval using existing connection"]',
+      ),
+    ).toBeNull();
     expect(container.textContent).toContain('reconnection required');
     expect(container.textContent).toContain(
       'Workflow access for Legacy Provider needs reconnection, but the provider is not configured on the backend.',
@@ -335,6 +344,65 @@ describe('SecureTokenStoragePage frontend plugin page', () => {
     expect(container.textContent).toContain('Provider connection rejected.');
     expect(container.textContent).not.toContain('Approve github access');
     expect(window.location.pathname).toBe('/settings/auth-providers');
+    expect(window.location.search).toBe('');
+    expect(fetch).toHaveBeenCalledTimes(4);
+  });
+
+  it('disconnects the provider from the pending approval state', async () => {
+    window.history.replaceState(
+      {},
+      '',
+      '/secure-token-storage?sessionId=session-1&provider=github&scopes=repo',
+    );
+    fetch.mockReset();
+    fetch
+      .mockResolvedValueOnce(backendStatus())
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([providerStatus('github', [], { connected: true })]),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify([providerStatus('github')]), {
+          status: 200,
+        }),
+      );
+
+    await act(async () => {
+      root.render(<SecureTokenStoragePage />);
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain('Approve github access');
+    const disconnectButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Disconnect github workflow connection before approval"]',
+    );
+    expect(disconnectButton).toBeDefined();
+
+    await act(async () => {
+      disconnectButton!.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(fetch).toHaveBeenNthCalledWith(
+      3,
+      `${await discoveryApi.getBaseUrl(
+        'secure-token-storage',
+      )}/connections/github/disconnect`,
+      { method: 'POST' },
+    );
+    expect(container.textContent).not.toContain('Approve github access');
+    expect(container.textContent).toContain(
+      'Disconnected github and revoked its grants.',
+    );
+    expect(
+      container.querySelector(
+        'button[aria-label="Connect GitHub for workflow access"]',
+      ),
+    ).toBeDefined();
     expect(window.location.search).toBe('');
     expect(fetch).toHaveBeenCalledTimes(4);
   });
@@ -471,6 +539,17 @@ describe('SecureTokenStoragePage frontend plugin page', () => {
       .mockResolvedValueOnce(new Response(null, { status: 204 }))
       .mockResolvedValueOnce(
         new Response(
+          JSON.stringify({
+            sessionId: 'session-2',
+            provider: 'github',
+            scopes: ['repo'],
+            expiresAt: '2026-09-08T12:00:00.000Z',
+          }),
+          { status: 201 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
           JSON.stringify([
             providerStatus(
               'github',
@@ -483,7 +562,7 @@ describe('SecureTokenStoragePage frontend plugin page', () => {
                   revokedAt: '2026-09-08T12:01:00.000Z',
                 },
               ],
-              { connected: false },
+              { connected: true },
             ),
           ]),
           { status: 200 },
@@ -513,8 +592,132 @@ describe('SecureTokenStoragePage frontend plugin page', () => {
       await Promise.resolve();
     });
 
-    expect(container.textContent).not.toContain('Scopes: repo');
-    expect(fetch).toHaveBeenCalledTimes(4);
+    expect(container.textContent).not.toContain('Grant ID: grant-1');
+    expect(container.textContent).toContain('No grants found.');
+    expect(container.textContent).toContain('Approve github access');
+    expect(container.textContent).toContain('Requested scopes: repo');
+    expect(
+      container.querySelector(
+        'button[aria-label="Reject github workflow access"]',
+      ),
+    ).toBeDefined();
+    expect(
+      container.querySelector(
+        'button[aria-label="Request GitHub grant approval using existing connection"]',
+      ),
+    ).toBeNull();
+    expect(
+      container.querySelector(
+        'button[aria-label="Connect GitHub for workflow access"]',
+      ),
+    ).toBeNull();
+    expect(fetch).toHaveBeenCalledTimes(5);
+  });
+
+  it('requests approval from the existing connection and creates a grant only after approval', async () => {
+    window.history.replaceState({}, '', '/settings/auth-providers');
+    fetch.mockReset();
+    const revokedGrant = {
+      grantId: 'grant-1',
+      provider: 'github',
+      scopes: ['repo'],
+      expiresAt: '2026-09-08T12:00:00.000Z',
+      revokedAt: '2026-09-08T12:01:00.000Z',
+    };
+    const replacementGrant = {
+      grantId: 'grant-2',
+      provider: 'github',
+      scopes: ['repo'],
+      expiresAt: '2027-10-08T12:00:00.000Z',
+    };
+    fetch
+      .mockResolvedValueOnce(backendStatus())
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            providerStatus('github', [revokedGrant], { connected: true }),
+          ]),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            sessionId: 'session-2',
+            provider: 'github',
+            scopes: ['repo'],
+            expiresAt: '2026-09-08T12:00:00.000Z',
+          }),
+          { status: 201 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(replacementGrant), { status: 201 }),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            providerStatus('github', [replacementGrant], { connected: true }),
+          ]),
+          { status: 200 },
+        ),
+      );
+
+    await act(async () => {
+      root.render(<WorkflowProviderConnections />);
+      await Promise.resolve();
+    });
+
+    const requestGrantButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Request GitHub grant approval using existing connection"]',
+    );
+    expect(requestGrantButton).toBeDefined();
+    expect(
+      container.querySelector(
+        'button[aria-label="Connect GitHub for workflow access"]',
+      ),
+    ).toBeNull();
+
+    await act(async () => {
+      requestGrantButton!.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(fetch).toHaveBeenNthCalledWith(
+      3,
+      `${await discoveryApi.getBaseUrl(
+        'secure-token-storage',
+      )}/connections/github/grants`,
+      { method: 'POST' },
+    );
+    expect(container.textContent).toContain('Approve github access');
+    expect(container.textContent).toContain('Requested scopes: repo');
+    expect(container.textContent).not.toContain('Grant ID: grant-2');
+    expect(window.location.search).toContain('sessionId=session-2');
+
+    const approveReplacementButton = Array.from(
+      container.querySelectorAll('button'),
+    ).find(button => button.textContent?.trim() === 'Approve');
+    expect(approveReplacementButton).toBeDefined();
+    await act(async () => {
+      approveReplacementButton!.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(fetch).toHaveBeenNthCalledWith(
+      4,
+      `${await discoveryApi.getBaseUrl(
+        'secure-token-storage',
+      )}/connections/session-2/consent`,
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ decision: 'approve' }),
+      }),
+    );
+    expect(container.textContent).toContain('Grant ID: grant-2');
+    expect(container.textContent).toContain('Grant grant-2 is ready.');
   });
 
   it('shows refresh for an expired grant and reloads it after refreshing', async () => {

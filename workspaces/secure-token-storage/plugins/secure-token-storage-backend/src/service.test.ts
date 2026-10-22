@@ -102,10 +102,12 @@ describe('DefaultSecureTokenStorageService', () => {
     });
 
     expect(grant.grantId).toEqual(expect.any(String));
+    expect(grant.expiresAt).toEqual(new Date('2026-09-08T12:00:00Z'));
     expect(repository.createGrant).toHaveBeenCalledWith(
       expect.objectContaining({
         callerSubject: 'sonataflow',
         scopes: ['repo'],
+        expiresAt: new Date('2026-09-08T12:00:00Z'),
       }),
     );
   });
@@ -292,6 +294,7 @@ describe('DefaultSecureTokenStorageService', () => {
       expiresAt: new Date('2026-09-07T12:05:00Z'),
     });
     const stored = repository.createConnectSession.mock.calls[0][0];
+    expect(stored.sessionType).toBe('oauth');
     expect(stored.stateHash).not.toEqual(
       new URL(result.authorizationUrl).searchParams.get('state'),
     );
@@ -302,6 +305,78 @@ describe('DefaultSecureTokenStorageService', () => {
       ),
     ).not.toHaveLength(0);
     expect(stored.consentStatus).toBe('pending');
+  });
+
+  it('creates a pending consent session from a connected provider without OAuth', async () => {
+    const repository = createRepository();
+    repository.findConnection.mockResolvedValue({
+      id: 'connection-1',
+      userEntityRef: 'user:default/luke',
+      provider: 'github',
+      accessToken: {
+        ciphertext: 'ciphertext',
+        iv: 'iv',
+        authTag: 'auth-tag',
+        keyVersion: 'v1',
+      },
+      scopes: ['repo'],
+      createdAt: new Date('2026-09-07T11:00:00Z'),
+      updatedAt: new Date('2026-09-07T11:00:00Z'),
+    });
+    const cipher = createTokenCipher({
+      activeKey: key,
+      activeKeyVersion: 'v1',
+    });
+    const adapter: ProviderOAuthAdapter = {
+      createAuthorizationUrl: jest.fn(),
+      exchangeAuthorizationCode: jest.fn(),
+    };
+    const now = new Date('2026-09-07T12:00:00Z');
+    const service = new DefaultSecureTokenStorageService(true, {
+      repository,
+      cipher,
+      now: () => now,
+      oauthAdapters: new Map([['github', adapter]]),
+      allowedCallerSubjects: new Set(['sonataflow']),
+      allowedRedirectUris: new Set(['http://localhost/callback']),
+      connectSessionTtlMs: 5 * 60 * 1000,
+    });
+
+    const result = await service.requestProviderGrantConsent({
+      userEntityRef: 'user:default/luke',
+      provider: 'github',
+      scopes: ['repo'],
+      redirectUri: 'http://localhost/callback',
+      callerSubject: 'sonataflow',
+    });
+
+    expect(result).toEqual({
+      sessionId: expect.any(String),
+      provider: 'github',
+      scopes: ['repo'],
+      expiresAt: new Date('2026-09-07T12:05:00Z'),
+    });
+    const stored = repository.createConnectSession.mock.calls[0][0];
+    expect(stored.sessionType).toBe('grant-consent');
+    expect(stored.stateConsumedAt).toEqual(now);
+    expect(stored.completedAt).toEqual(now);
+    expect(stored.consentStatus).toBe('pending');
+    expect(
+      cipher.decrypt(
+        stored.codeVerifier,
+        `secure-token-storage:connect-session:${stored.id}:code-verifier`,
+      ),
+    ).not.toHaveLength(0);
+
+    repository.findConnectSessionByStateHash.mockResolvedValue(stored);
+    await expect(
+      service.completeProviderConnection({
+        provider: 'github',
+        state: 'not-an-oauth-state',
+        code: 'authorization-code',
+      }),
+    ).rejects.toMatchObject({ code: 'connect-session-not-found' });
+    expect(adapter.exchangeAuthorizationCode).not.toHaveBeenCalled();
   });
 
   it('exchanges a one-time callback and stores provider credentials without returning them', async () => {
@@ -378,6 +453,7 @@ describe('DefaultSecureTokenStorageService', () => {
     const repository = createRepository();
     repository.findConnectSession.mockResolvedValue({
       id: 'session-1',
+      sessionType: 'oauth',
       stateHash: 'state-hash',
       userEntityRef: 'user:default/luke',
       callerSubject: 'sonataflow',

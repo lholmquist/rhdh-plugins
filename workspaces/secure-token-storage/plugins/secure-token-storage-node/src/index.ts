@@ -96,6 +96,23 @@ export interface ProviderConnectionStart {
 }
 
 /**
+ * A pending grant approval request created from an existing provider
+ * connection.
+ *
+ * @public
+ */
+export interface ProviderGrantConsentRequest {
+  /** Opaque broker session identifier used for approval. */
+  sessionId: string;
+  /** Provider identifier. */
+  provider: string;
+  /** Configured scopes requested for the grant. */
+  scopes: string[];
+  /** Time at which the approval request expires. */
+  expiresAt: Date;
+}
+
+/**
  * The safe result of completing an OAuth callback.
  *
  * @public
@@ -226,6 +243,7 @@ export type SecureTokenStorageErrorCode =
   | 'provider-refresh-failed'
   | 'token-integrity-failed'
   | 'provider-not-configured'
+  | 'connection-scopes-mismatch'
   | 'invalid-redirect-uri'
   | 'connect-session-not-found'
   | 'connect-session-expired'
@@ -273,6 +291,14 @@ export interface SecureTokenStorageService {
   startProviderConnection(
     input: StartProviderConnectionInput,
   ): Promise<ProviderConnectionStart>;
+  /** Starts a grant approval request using an existing provider connection. */
+  requestProviderGrantConsent(input: {
+    userEntityRef: string;
+    provider: string;
+    scopes: string[];
+    redirectUri: string;
+    callerSubject: string;
+  }): Promise<ProviderGrantConsentRequest>;
   /** Completes a provider callback and stores its credentials encrypted. */
   completeProviderConnection(input: {
     provider: string;

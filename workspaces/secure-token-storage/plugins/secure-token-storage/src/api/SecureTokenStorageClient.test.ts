@@ -133,6 +133,7 @@ describe('SecureTokenStorageClient frontend plugin client', () => {
         scopes: ['User.Read'],
         accessTokenExpiresAt: '2026-09-07T13:00:00.000Z',
         reconnectRequired: false,
+        userConnectionConfigured: true,
         grants: [
           {
             grantId: 'grant-1',
@@ -156,6 +157,31 @@ describe('SecureTokenStorageClient frontend plugin client', () => {
 
     await expect(client.listProviders()).resolves.toEqual(providers);
     expect(fetch).toHaveBeenCalledWith(`${baseUrl}/providers`, undefined);
+  });
+
+  it('requests grant approval using an existing provider connection', async () => {
+    const consentRequest = {
+      sessionId: 'session-2',
+      provider: 'github',
+      scopes: ['repo'],
+      expiresAt: '2026-09-08T12:00:00.000Z',
+    };
+    const fetch = jest
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify(consentRequest), { status: 201 }),
+      );
+    const client = new SecureTokenStorageClient({
+      discoveryApi,
+      fetchApi: { fetch } as FetchApi,
+    });
+
+    await expect(
+      client.requestGrantConsentFromConnection('github'),
+    ).resolves.toEqual(consentRequest);
+    expect(fetch).toHaveBeenCalledWith(`${baseUrl}/connections/github/grants`, {
+      method: 'POST',
+    });
   });
 
   it('reports whether the secure-token-storage backend is enabled', async () => {

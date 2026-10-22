@@ -352,7 +352,7 @@ describe('secure token storage router', () => {
     });
   });
 
-  it('returns token-free provider status for the authenticated user', async () => {
+  it('returns token-free status and requires reconnect after configured scopes change', async () => {
     const httpAuth = {
       credentials: jest.fn().mockResolvedValue(userCredentials()),
     } as unknown as jest.Mocked<HttpAuthService>;
@@ -380,7 +380,15 @@ describe('secure token storage router', () => {
     const app = express();
     app.use(
       '/api/secure-token-storage',
-      await createRouter({ httpAuth, service }),
+      await createRouter({
+        httpAuth,
+        service,
+        userConnection: {
+          callerSubject: 'sonataflow',
+          redirectUri: 'http://localhost/callback',
+          scopes: ['repo', 'read:user'],
+        },
+      }),
     );
 
     const response = await request(app)
@@ -394,7 +402,8 @@ describe('secure token storage router', () => {
         connected: true,
         scopes: ['repo'],
         accessTokenExpiresAt: '2026-09-07T13:00:00.000Z',
-        reconnectRequired: false,
+        reconnectRequired: true,
+        userConnectionConfigured: true,
         grants: [
           {
             grantId: 'grant-1',
@@ -420,6 +429,98 @@ describe('secure token storage router', () => {
     expect(JSON.stringify(response.body)).not.toContain(
       'provider-refresh-token',
     );
+  });
+
+  it('starts a pending grant approval from an existing provider connection', async () => {
+    const httpAuth = {
+      credentials: jest.fn().mockResolvedValue(userCredentials()),
+    } as unknown as jest.Mocked<HttpAuthService>;
+    const service = {
+      listProviders: jest.fn().mockResolvedValue([
+        {
+          provider: 'github',
+          configured: true,
+          connected: true,
+          scopes: ['repo'],
+          reconnectRequired: false,
+          grants: [],
+        },
+      ]),
+      requestProviderGrantConsent: jest.fn().mockResolvedValue({
+        sessionId: 'session-2',
+        provider: 'github',
+        scopes: ['repo'],
+        expiresAt: new Date('2026-09-07T12:10:00Z'),
+      }),
+    } as unknown as jest.Mocked<SecureTokenStorageService>;
+    const app = express();
+    app.use(
+      '/api/secure-token-storage',
+      await createRouter({
+        httpAuth,
+        service,
+        userConnection: {
+          callerSubject: 'sonataflow',
+          redirectUri: 'http://localhost/callback',
+          scopes: ['repo'],
+        },
+      }),
+    );
+
+    await request(app)
+      .post('/api/secure-token-storage/connections/github/grants')
+      .expect(201, {
+        sessionId: 'session-2',
+        provider: 'github',
+        scopes: ['repo'],
+        expiresAt: '2026-09-07T12:10:00.000Z',
+      });
+
+    expect(service.requestProviderGrantConsent).toHaveBeenCalledWith({
+      userEntityRef: 'user:default/luke',
+      provider: 'github',
+      callerSubject: 'sonataflow',
+      scopes: ['repo'],
+      redirectUri: 'http://localhost/callback',
+    });
+  });
+
+  it('requires reconnecting when configured scopes differ from the connection', async () => {
+    const httpAuth = {
+      credentials: jest.fn().mockResolvedValue(userCredentials()),
+    } as unknown as jest.Mocked<HttpAuthService>;
+    const service = {
+      listProviders: jest.fn().mockResolvedValue([
+        {
+          provider: 'github',
+          configured: true,
+          connected: true,
+          scopes: ['repo'],
+          reconnectRequired: false,
+          grants: [],
+        },
+      ]),
+      requestProviderGrantConsent: jest.fn(),
+    } as unknown as jest.Mocked<SecureTokenStorageService>;
+    const app = express();
+    app.use(
+      '/api/secure-token-storage',
+      await createRouter({
+        httpAuth,
+        service,
+        userConnection: {
+          callerSubject: 'sonataflow',
+          redirectUri: 'http://localhost/callback',
+          scopes: ['repo', 'read:user'],
+        },
+      }),
+    );
+
+    await request(app)
+      .post('/api/secure-token-storage/connections/github/grants')
+      .expect(409, { error: 'connection-scopes-mismatch' });
+
+    expect(service.requestProviderGrantConsent).not.toHaveBeenCalled();
   });
 
   it('disconnects a provider for the authenticated user', async () => {

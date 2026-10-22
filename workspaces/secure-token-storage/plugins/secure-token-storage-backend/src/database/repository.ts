@@ -44,9 +44,11 @@ export interface StoredGrant {
 }
 
 export type ConnectSessionConsentStatus = 'pending' | 'approved' | 'rejected';
+export type ConnectSessionType = 'oauth' | 'grant-consent';
 
 export interface StoredConnectSession {
   id: string;
+  sessionType: ConnectSessionType;
   stateHash: string;
   userEntityRef: string;
   callerSubject: string;
@@ -128,6 +130,7 @@ type GrantRow = {
 
 type ConnectSessionRow = {
   id: string;
+  session_type: ConnectSessionType;
   state_hash: string;
   user_entity_ref: string;
   caller_subject: string;
@@ -196,6 +199,7 @@ const fromConnectSessionRow = (
   row: ConnectSessionRow,
 ): StoredConnectSession => ({
   id: row.id,
+  sessionType: row.session_type ?? 'oauth',
   stateHash: row.state_hash,
   userEntityRef: row.user_entity_ref,
   callerSubject: row.caller_subject,
@@ -412,6 +416,19 @@ export class TokenStorageRepository {
         .where({ user_entity_ref: userEntityRef, provider })
         .whereNull('revoked_at')
         .update({ revoked_at: revokedAt });
+      // Disconnecting from the provider also cancels any approval card that
+      // was issued for this connection, so its session cannot create a grant.
+      await transaction('secure_token_storage_connect_sessions')
+        .where({
+          user_entity_ref: userEntityRef,
+          provider,
+          consent_status: 'pending',
+        })
+        .whereNotNull('completed_at')
+        .update({
+          consent_status: 'rejected',
+          consent_decided_at: revokedAt,
+        });
       return { connectionId: connection.id, revokedGrantCount };
     });
   }
@@ -433,6 +450,7 @@ export class TokenStorageRepository {
   async createConnectSession(session: StoredConnectSession): Promise<void> {
     await this.database('secure_token_storage_connect_sessions').insert({
       id: session.id,
+      session_type: session.sessionType,
       state_hash: session.stateHash,
       user_entity_ref: session.userEntityRef,
       caller_subject: session.callerSubject,
@@ -509,6 +527,17 @@ export class TokenStorageRepository {
         .whereNotNull('completed_at')
         .first<ConnectSessionRow>();
       if (!row) return false;
+
+      // Lock the connection while issuing the grant. This serializes approval
+      // with disconnect: if disconnect wins, approval sees no live connection;
+      // if approval wins, disconnect revokes the newly-created grant too.
+      const connection = await transaction('secure_token_storage_connections')
+        .select('id')
+        .where({ user_entity_ref: row.user_entity_ref, provider: row.provider })
+        .whereNull('revoked_at')
+        .forUpdate()
+        .first<{ id: string }>();
+      if (!connection) return false;
 
       await transaction('secure_token_storage_grants').insert({
         id: grant.id,

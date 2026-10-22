@@ -93,6 +93,14 @@ const connectVerifierAssociatedData = (sessionId: string): string =>
 const sha256Base64Url = (value: string): string =>
   createHash('sha256').update(value, 'utf8').digest('base64url');
 
+function sameScopes(current: string[], requested: string[]): boolean {
+  const currentScopes = new Set(current);
+  return (
+    currentScopes.size === requested.length &&
+    requested.every(scope => currentScopes.has(scope))
+  );
+}
+
 const toTokenGrant = (grant: StoredGrant): TokenGrant => ({
   grantId: grant.id,
   callerSubject: grant.callerSubject,
@@ -421,6 +429,7 @@ export class DefaultSecureTokenStorageService
 
     await this.repository!.createConnectSession({
       id: sessionId,
+      sessionType: 'oauth',
       stateHash: sha256Base64Url(state),
       userEntityRef: input.userEntityRef,
       callerSubject: input.callerSubject,
@@ -439,6 +448,79 @@ export class DefaultSecureTokenStorageService
     return { sessionId, authorizationUrl, expiresAt };
   }
 
+  async requestProviderGrantConsent(input: {
+    userEntityRef: string;
+    provider: string;
+    scopes: string[];
+    redirectUri: string;
+    callerSubject: string;
+  }): Promise<{
+    sessionId: string;
+    provider: string;
+    scopes: string[];
+    expiresAt: Date;
+  }> {
+    this.assertReady();
+    if (!this.allowedCallerSubjects.has(input.callerSubject)) {
+      throw new SecureTokenStorageError('caller-not-authorized');
+    }
+    if (!this.allowedRedirectUris.has(input.redirectUri)) {
+      throw new SecureTokenStorageError('invalid-redirect-uri');
+    }
+    if (!this.oauthAdapters.has(input.provider)) {
+      throw new SecureTokenStorageError('provider-not-configured');
+    }
+
+    const connection = await this.repository!.findConnection(
+      input.userEntityRef,
+      input.provider,
+    );
+    if (!connection || connection.revokedAt) {
+      throw new SecureTokenStorageError('connection-not-found');
+    }
+    if (!sameScopes(connection.scopes, input.scopes)) {
+      throw new SecureTokenStorageError('connection-scopes-mismatch');
+    }
+
+    const sessionId = randomUUID();
+    const now = this.now();
+    const expiresAt = new Date(now.getTime() + this.connectSessionTtlMs);
+
+    // Grant-consent sessions use the same owner-bound, expiring approval
+    // lifecycle as OAuth sessions, but cannot be completed through the OAuth
+    // callback because their session type is explicitly checked there.
+    // The schema requires PKCE fields, so store fresh one-time values that are
+    // never returned or used for an OAuth exchange.
+    const internalState = randomBytes(32).toString('base64url');
+    const internalVerifier = randomBytes(32).toString('base64url');
+    await this.repository!.createConnectSession({
+      id: sessionId,
+      sessionType: 'grant-consent',
+      stateHash: sha256Base64Url(internalState),
+      userEntityRef: input.userEntityRef,
+      callerSubject: input.callerSubject,
+      provider: input.provider,
+      scopes: [...input.scopes],
+      redirectUri: input.redirectUri,
+      codeVerifier: this.cipher!.encrypt(
+        internalVerifier,
+        connectVerifierAssociatedData(sessionId),
+      ),
+      createdAt: now,
+      expiresAt,
+      stateConsumedAt: now,
+      completedAt: now,
+      consentStatus: 'pending',
+    });
+
+    return {
+      sessionId,
+      provider: input.provider,
+      scopes: [...input.scopes],
+      expiresAt,
+    };
+  }
+
   async completeProviderConnection(input: {
     provider: string;
     state: string;
@@ -454,7 +536,11 @@ export class DefaultSecureTokenStorageService
     const session = await this.repository!.findConnectSessionByStateHash(
       sha256Base64Url(input.state),
     );
-    if (!session || session.provider !== input.provider) {
+    if (
+      !session ||
+      session.provider !== input.provider ||
+      session.sessionType !== 'oauth'
+    ) {
       throw new SecureTokenStorageError('connect-session-not-found');
     }
     const now = this.now();

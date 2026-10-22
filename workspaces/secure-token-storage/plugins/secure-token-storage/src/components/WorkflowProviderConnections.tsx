@@ -31,6 +31,7 @@ export function WorkflowProviderConnections({
   const {
     approve,
     connect,
+    requestGrant,
     consentRequest,
     disconnect,
     enabled,
@@ -54,7 +55,16 @@ export function WorkflowProviderConnections({
     provider =>
       provider.configured &&
       (provider.reconnectRequired ||
-        !provider.grants.some(grant => !grant.revokedAt)),
+        (!provider.connected &&
+          !provider.grants.some(grant => !grant.revokedAt))),
+  );
+  const providersToCreateGrant = providers.filter(
+    provider =>
+      provider.configured &&
+      provider.userConnectionConfigured &&
+      provider.connected &&
+      !provider.reconnectRequired &&
+      !provider.grants.some(grant => !grant.revokedAt),
   );
   const providersNeedingAdminConfiguration = providers.filter(
     provider => provider.reconnectRequired && !provider.configured,
@@ -174,6 +184,52 @@ export function WorkflowProviderConnections({
             </Paper>
           )}
 
+        {!loading &&
+          providersToCreateGrant.length > 0 &&
+          !consentRequest &&
+          !retryProvider && (
+            <Paper sx={{ mt: 3, p: 3 }}>
+              <Typography variant="h6" gutterBottom>
+                Request a new grant
+              </Typography>
+              <Typography color="text.secondary" paragraph>
+                Request a new grant for the configured workflow service using
+                the existing provider connection. You will review and approve
+                the requested scopes before the grant is created. Reconnect if
+                the configured scopes change.
+              </Typography>
+              <Stack direction="row" spacing={2} sx={{ mt: 3 }}>
+                {providersToCreateGrant.map(provider => {
+                  const providerName = providerDisplayName(provider.provider);
+                  return (
+                    <Button
+                      key={provider.provider}
+                      variant="contained"
+                      onClick={() => void requestGrant(provider.provider)}
+                      disabled={Boolean(pendingAction)}
+                      aria-label={`Request ${providerName} grant approval using existing connection`}
+                    >
+                      {pendingAction === `grant:${provider.provider}`
+                        ? `Preparing ${providerName} approval…`
+                        : `Request ${providerName} grant`}
+                    </Button>
+                  );
+                })}
+              </Stack>
+              {providersToCreateGrant.map(provider => (
+                <Typography
+                  key={`${provider.provider}-status`}
+                  color="text.secondary"
+                  variant="body2"
+                  sx={{ mt: 1 }}
+                >
+                  {providerDisplayName(provider.provider)}: connected · Scopes:{' '}
+                  {provider.scopes.join(', ')}
+                </Typography>
+              ))}
+            </Paper>
+          )}
+
         {!loading && !providers.some(provider => provider.configured) && (
           <Alert severity="info" sx={{ mt: 3 }}>
             No OAuth providers are configured for workflow connections.
@@ -223,6 +279,17 @@ export function WorkflowProviderConnections({
               >
                 {pendingAction === 'reject' ? 'Rejecting…' : 'Reject'}
               </Button>
+              <Button
+                variant="outlined"
+                color="error"
+                onClick={() => void disconnect(consentRequest.provider)}
+                disabled={Boolean(pendingAction)}
+                aria-label={`Disconnect ${consentRequest.provider} workflow connection before approval`}
+              >
+                {pendingAction === `disconnect:${consentRequest.provider}`
+                  ? 'Disconnecting…'
+                  : 'Disconnect provider'}
+              </Button>
             </Stack>
           </Paper>
         )}
@@ -237,8 +304,9 @@ export function WorkflowProviderConnections({
           </Typography>
           <Typography color="text.secondary" paragraph>
             These grants authorize workflows to use a connected provider. They
-            do not sign you in to RHDH. After OAuth completes, approve requested
-            workflow access here.
+            do not sign you in to RHDH. Approve workflow access here after a new
+            OAuth connection, or request a replacement grant from an existing
+            connection and approve it here without reconnecting.
           </Typography>
           {loading && (
             <CircularProgress size={24} aria-label="Loading workflow grants" />

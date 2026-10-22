@@ -49,6 +49,14 @@ export interface ProviderDisconnectResult {
 }
 
 // @public
+export interface ProviderGrantConsentRequest {
+  expiresAt: Date;
+  provider: string;
+  scopes: string[];
+  sessionId: string;
+}
+
+// @public
 export class SecureTokenStorageError extends Error {
   constructor(code: SecureTokenStorageErrorCode);
   readonly code: SecureTokenStorageErrorCode;
@@ -66,6 +74,7 @@ export type SecureTokenStorageErrorCode =
   | 'provider-refresh-failed'
   | 'token-integrity-failed'
   | 'provider-not-configured'
+  | 'connection-scopes-mismatch'
   | 'invalid-redirect-uri'
   | 'connect-session-not-found'
   | 'connect-session-expired'
@@ -142,6 +151,13 @@ export interface SecureTokenStorageService {
     sessionId: string;
     userEntityRef: string;
   }): Promise<void>;
+  requestProviderGrantConsent(input: {
+    userEntityRef: string;
+    provider: string;
+    scopes: string[];
+    redirectUri: string;
+    callerSubject: string;
+  }): Promise<ProviderGrantConsentRequest>;
   revokeGrant(options: {
     grantId: string;
     userEntityRef: string;

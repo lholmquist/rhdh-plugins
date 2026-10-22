@@ -189,6 +189,20 @@ export function useWorkflowProviderConnections() {
     );
   }, []);
 
+  const showConsentRequest = useCallback((request: ConsentRequest) => {
+    setConsentRequest(request);
+    const url = new URL(window.location.href);
+    url.searchParams.delete('connectionError');
+    url.searchParams.set('sessionId', request.sessionId);
+    url.searchParams.set('provider', request.provider);
+    url.searchParams.set('scopes', request.scopes.join(','));
+    window.history.replaceState(
+      window.history.state,
+      document.title,
+      `${url.pathname}${url.search}${url.hash}`,
+    );
+  }, []);
+
   const connect = useCallback(
     async (provider: string) => {
       setPendingAction(`connect:${provider}`);
@@ -207,6 +221,39 @@ export function useWorkflowProviderConnections() {
       }
     },
     [client, clearConsentRequest],
+  );
+
+  const requestGrant = useCallback(
+    async (provider: string) => {
+      setPendingAction(`grant:${provider}`);
+      setError(undefined);
+      setMessage(undefined);
+      try {
+        const request = await client.requestGrantConsentFromConnection(
+          provider,
+        );
+        showConsentRequest({
+          sessionId: request.sessionId,
+          provider: request.provider,
+          scopes: request.scopes,
+        });
+      } catch (caughtError) {
+        const code =
+          caughtError instanceof SecureTokenStorageApiError
+            ? caughtError.code
+            : undefined;
+        setError(
+          code === 'connection-scopes-mismatch' ||
+            code === 'connection-reconnect-required'
+            ? `The ${provider} connection needs updated scopes or reauthorization. Reconnect the provider to continue.`
+            : `Unable to request approval for a new ${provider} grant.`,
+        );
+        await loadProviders();
+      } finally {
+        setPendingAction(undefined);
+      }
+    },
+    [client, loadProviders, showConsentRequest],
   );
 
   const approve = useCallback(async () => {
@@ -261,17 +308,35 @@ export function useWorkflowProviderConnections() {
     async (grant: ProviderTokenGrant) => {
       setPendingAction(grant.grantId);
       setError(undefined);
+      setMessage(undefined);
+      let revoked = false;
       try {
         await client.revokeGrant(grant.grantId);
-        setMessage(`Revoked the ${grant.provider} grant.`);
+        revoked = true;
+        const request = await client.requestGrantConsentFromConnection(
+          grant.provider,
+        );
+        showConsentRequest({
+          sessionId: request.sessionId,
+          provider: request.provider,
+          scopes: request.scopes,
+        });
+        setMessage(
+          `Revoked the ${grant.provider} grant. Review the new approval request below.`,
+        );
         await loadProviders();
       } catch {
-        setError('Unable to revoke this grant.');
+        setError(
+          revoked
+            ? `The ${grant.provider} grant was revoked, but a new approval request could not be prepared. Reconnect if the configured scopes have changed, or request approval below.`
+            : `Unable to revoke the ${grant.provider} grant.`,
+        );
+        await loadProviders();
       } finally {
         setPendingAction(undefined);
       }
     },
-    [client, loadProviders],
+    [client, loadProviders, showConsentRequest],
   );
 
   const refresh = useCallback(
@@ -295,8 +360,11 @@ export function useWorkflowProviderConnections() {
     async (provider: string) => {
       setPendingAction(`disconnect:${provider}`);
       setError(undefined);
+      setMessage(undefined);
       try {
         await client.disconnectProvider(provider);
+        clearConsentRequest();
+        setRetryProvider(undefined);
         setMessage(`Disconnected ${provider} and revoked its grants.`);
         await loadProviders();
       } catch {
@@ -305,12 +373,13 @@ export function useWorkflowProviderConnections() {
         setPendingAction(undefined);
       }
     },
-    [client, loadProviders],
+    [clearConsentRequest, client, loadProviders],
   );
 
   return {
     approve,
     connect,
+    requestGrant,
     consentRequest,
     disconnect,
     enabled,

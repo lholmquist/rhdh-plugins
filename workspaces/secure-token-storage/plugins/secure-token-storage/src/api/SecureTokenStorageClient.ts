@@ -21,6 +21,7 @@ export interface SecureTokenStorageProviderStatus {
   scopes: string[];
   accessTokenExpiresAt?: string;
   reconnectRequired: boolean;
+  userConnectionConfigured: boolean;
   grants: ProviderTokenGrant[];
 }
 
@@ -34,6 +35,13 @@ export interface ProviderConnectionGrant {
 export interface ProviderConnectionStart {
   sessionId: string;
   authorizationUrl: string;
+  expiresAt: string;
+}
+
+export interface ProviderGrantConsentRequest {
+  sessionId: string;
+  provider: string;
+  scopes: string[];
   expiresAt: string;
 }
 
@@ -90,6 +98,15 @@ export class SecureTokenStorageClient {
   async startConnection(provider: string): Promise<ProviderConnectionStart> {
     return this.request<ProviderConnectionStart>(
       `/connections/${encodeURIComponent(provider)}/start-user`,
+      { method: 'POST' },
+    );
+  }
+
+  async requestGrantConsentFromConnection(
+    provider: string,
+  ): Promise<ProviderGrantConsentRequest> {
+    return this.request<ProviderGrantConsentRequest>(
+      `/connections/${encodeURIComponent(provider)}/grants`,
       { method: 'POST' },
     );
   }

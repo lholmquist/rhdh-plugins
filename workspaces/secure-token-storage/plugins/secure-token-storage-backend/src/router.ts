@@ -25,6 +25,7 @@ function errorStatus(error: SecureTokenStorageError): number {
       return 403;
     case 'provider-refresh-required':
     case 'provider-refresh-failed':
+    case 'connection-scopes-mismatch':
       return 409;
     case 'connect-session-not-found':
       return 404;
@@ -64,6 +65,14 @@ function isStringArray(value: unknown): value is string[] {
   return (
     Array.isArray(value) &&
     value.every(item => typeof item === 'string' && item.length > 0)
+  );
+}
+
+function sameScopes(current: string[], configured: string[]): boolean {
+  const currentScopes = new Set(current);
+  return (
+    currentScopes.size === configured.length &&
+    configured.every(scope => currentScopes.has(scope))
   );
 }
 
@@ -110,10 +119,21 @@ export async function createRouter(options: {
       const credentials = await options.httpAuth.credentials(request, {
         allow: ['user'],
       });
+      const providers = await options.service.listProviders({
+        userEntityRef: credentials.principal.userEntityRef,
+      });
       response.json(
-        await options.service.listProviders({
-          userEntityRef: credentials.principal.userEntityRef,
-        }),
+        providers.map(provider => ({
+          ...provider,
+          reconnectRequired:
+            provider.reconnectRequired ||
+            Boolean(
+              options.userConnection &&
+                provider.connected &&
+                !sameScopes(provider.scopes, options.userConnection.scopes),
+            ),
+          userConnectionConfigured: Boolean(options.userConnection),
+        })),
       );
     } catch (error) {
       sendSafeError(response, error);
@@ -186,6 +206,56 @@ export async function createRouter(options: {
       }
     },
   );
+
+  router.post('/connections/:provider/grants', async (request, response) => {
+    try {
+      const credentials = await options.httpAuth.credentials(request, {
+        allow: ['user'],
+      });
+      if (!options.userConnection) {
+        response.status(404).json({ error: 'user-connect-not-configured' });
+        return;
+      }
+
+      const userEntityRef = credentials.principal.userEntityRef;
+      const provider = request.params.provider;
+      const providerStatus = (
+        await options.service.listProviders({ userEntityRef })
+      ).find(status => status.provider === provider);
+      if (!providerStatus?.connected) {
+        response.status(404).json({ error: 'connection-not-found' });
+        return;
+      }
+      if (!providerStatus.configured) {
+        response.status(503).json({ error: 'provider-not-configured' });
+        return;
+      }
+      if (!sameScopes(providerStatus.scopes, options.userConnection.scopes)) {
+        response.status(409).json({ error: 'connection-scopes-mismatch' });
+        return;
+      }
+      if (providerStatus.reconnectRequired) {
+        response.status(409).json({ error: 'connection-reconnect-required' });
+        return;
+      }
+      if (providerStatus.grants.some(grant => !grant.revokedAt)) {
+        response.status(409).json({ error: 'active-grant-exists' });
+        return;
+      }
+
+      response.status(201).json(
+        await options.service.requestProviderGrantConsent({
+          userEntityRef,
+          provider,
+          callerSubject: options.userConnection.callerSubject,
+          scopes: [...options.userConnection.scopes],
+          redirectUri: options.userConnection.redirectUri,
+        }),
+      );
+    } catch (error) {
+      sendSafeError(response, error);
+    }
+  });
 
   router.get('/connections/:provider/callback', async (request, response) => {
     const state = queryString(request.query.state);
